@@ -19,7 +19,7 @@ android {
         targetSdkVersion 29
 
         versionCode 1
-        versionName "3.0+${commitHash()}"
+        versionName "4.0+${commitHash()}"
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
     }
