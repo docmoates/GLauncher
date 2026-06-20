@@ -1,0 +1,117 @@
+name: Claude Build
+
+# PocketForge dispatches this with a prompt. It runs the REAL Claude Code on
+# your chosen engine, lets it edit the repo + commit + push, then compiles the
+# APK and publishes it as a Release for your phone to download.
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "What Claude Code should build or change"
+        required: true
+        type: string
+      provider:
+        description: "oauth | apikey | openrouter"
+        required: false
+        default: "oauth"
+        type: string
+      model:
+        description: "Model id (used for OpenRouter; optional override otherwise)"
+        required: false
+        default: ""
+        type: string
+      title:
+        description: "Short title for the commit + release"
+        required: false
+        default: "PocketForge build"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Configure git
+        run: |
+          git config user.name "PocketForge Bot"
+          git config user.email "bot@pocketforge.local"
+
+      - name: Run Claude Code
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          MODEL: ${{ inputs.model }}
+          PROMPT: ${{ inputs.prompt }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -e
+          # Pick the engine. Defaults to your Claude subscription (OAuth token).
+          # Claude Code auto-loads CLAUDE.md from the repo for project guidance.
+          case "$PROVIDER" in
+            apikey)
+              if [ -z "$ANTHROPIC_API_KEY" ]; then echo "ANTHROPIC_API_KEY secret missing"; exit 1; fi
+              export ANTHROPIC_API_KEY
+              ;;
+            openrouter)
+              if [ -z "$OPENROUTER_API_KEY" ]; then echo "OPENROUTER_API_KEY secret missing"; exit 1; fi
+              export ANTHROPIC_BASE_URL="https://openrouter.ai/api/v1"
+              export ANTHROPIC_API_KEY="$OPENROUTER_API_KEY"
+              if [ -n "$MODEL" ]; then export ANTHROPIC_MODEL="$MODEL"; fi
+              ;;
+            *)
+              if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then echo "CLAUDE_CODE_OAUTH_TOKEN secret missing"; exit 1; fi
+              export CLAUDE_CODE_OAUTH_TOKEN
+              ;;
+          esac
+          claude -p "$PROMPT" --dangerously-skip-permissions --output-format text | tee claude-output.txt || true
+
+      - name: Commit & push Claude's changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "${{ inputs.title }}" -m "Built by Claude Code via PocketForge."
+            git push
+          else
+            echo "Claude produced no file changes."
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Stage APK
+        run: |
+          APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
+          cp "$APK" app-debug.apk
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: ${{ inputs.title }}
+          body: "Built by Claude Code via PocketForge."
+          files: app-debug.apk
