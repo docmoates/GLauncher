@@ -46,6 +46,9 @@ private const val CONTENT_FADE_MIN_CLAMP = 0.5f
 /** AllAppsTransitionController.INTERP_COEFF, i.e. Interpolators.DECELERATE_1_7. */
 private const val INTERP_COEFF = 1.7f
 
+/** Progress at which the home screen has fully faded out behind the drawer. */
+private const val HOME_FADE_END = 0.4f
+
 /** Past this fling speed the swipe direction wins regardless of distance. */
 private const val FLING_VELOCITY_PX_PER_SEC = 1000f
 
@@ -74,6 +77,14 @@ class AllAppsSwipeState {
             val start = 1f - SCRIM_FADE_START_MANUAL
             return ((start - progress.value) / start).coerceIn(0f, 1f)
         }
+
+    /**
+     * The home screen fades out as the drawer rises, like Launcher3's workspace
+     * fade -- without it the dock and search pill ghost through the translucent
+     * sheet.
+     */
+    val homeAlpha: Float
+        get() = ((progress.value - HOME_FADE_END) / (1f - HOME_FADE_END)).coerceIn(0f, 1f)
 
     /** App icons/search fade in late, between the two content clamp thresholds. */
     val contentAlpha: Float

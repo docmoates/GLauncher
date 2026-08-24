@@ -148,13 +148,15 @@ private fun LauncherRoot(widgetHost: AppWidgetHost) {
             // Launcher3's shiftRange.
             .onSizeChanged { swipe.shiftRangePx = it.height.toFloat() },
     ) {
-        HomeScreen(
-            apps = apps.orEmpty(),
-            widgets = widgets,
-            homeGrid = homeGrid,
-            swipe = swipe,
-            onOpenDrawer = { scope.launch { swipe.open() } },
-        )
+        Box(Modifier.graphicsLayer { alpha = swipe.homeAlpha }) {
+            HomeScreen(
+                apps = apps.orEmpty(),
+                widgets = widgets,
+                homeGrid = homeGrid,
+                swipe = swipe,
+                onOpenDrawer = { scope.launch { swipe.open() } },
+            )
+        }
 
         if (!swipe.isFullyClosed) {
             Box(
@@ -370,8 +372,12 @@ private fun AppDrawer(
         else all.filter { it.label.contains(query.trim(), ignoreCase = true) }
     }
 
+    // A sheet rising over the wallpaper, not an opaque page: rounded top
+    // corners and enough translucency for the wallpaper to tint through,
+    // matching how Pixel's all-apps reads.
     Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
         modifier = modifier
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection),
