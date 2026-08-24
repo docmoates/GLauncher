@@ -111,3 +111,17 @@ private fun Drawable.toImageBitmap(sizePx: Int = 144): ImageBitmap {
     draw(canvas)
     return bitmap.asImageBitmap()
 }
+
+/** Opens the system wallpaper picker ("Wallpaper & style" on Pixel). */
+fun openWallpaperPicker(context: Context) {
+    val candidates = listOf(
+        Intent("android.intent.action.SET_WALLPAPER").setPackage("com.google.android.apps.wallpaper"),
+        Intent(Intent.ACTION_SET_WALLPAPER),
+    )
+    for (intent in candidates) {
+        val ok = runCatching {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.isSuccess
+        if (ok) return
+    }
+}

@@ -1,10 +1,12 @@
 package com.pocketforge.app
 
+import android.appwidget.AppWidgetHost
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -13,7 +15,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +39,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -43,8 +49,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -53,38 +57,56 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import androidx.core.view.WindowCompat
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
+    /** Owns every widget id we place on the home screen. */
+    private lateinit var widgetHost: AppWidgetHost
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        widgetHost = LauncherWidgetHost(applicationContext, WIDGET_HOST_ID)
+        // The home screen floats over the wallpaper, so force *light* status and
+        // navigation bar icons. The default "auto" style follows the system
+        // light/dark setting and paints them black on a dark wallpaper.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         setContent {
             GLauncherTheme {
-                LauncherRoot()
+                LauncherRoot(widgetHost)
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        runCatching { widgetHost.startListening() }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        runCatching { widgetHost.stopListening() }
     }
 }
 
@@ -101,18 +123,26 @@ private object LauncherConfig {
 }
 
 @Composable
-private fun LauncherRoot() {
+private fun LauncherRoot(widgetHost: AppWidgetHost) {
     val context = LocalContext.current
     val apps by produceState<List<AppInfo>?>(initialValue = null) {
         value = withContext(Dispatchers.IO) { loadApps(context) }
     }
     var drawerOpen by remember { mutableStateOf(false) }
+    val widgets = rememberWidgetState(widgetHost)
+    val homeGrid = rememberHomeGridState()
+
+    // White bar icons over the wallpaper; in the app drawer follow the theme so
+    // they stay readable against its opaque surface.
+    SystemBarIcons(lightIcons = !drawerOpen || isSystemInDarkTheme())
 
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
 
     Box(Modifier.fillMaxSize()) {
         HomeScreen(
             apps = apps.orEmpty(),
+            widgets = widgets,
+            homeGrid = homeGrid,
             onOpenDrawer = { drawerOpen = true },
         )
         AnimatedVisibility(
@@ -122,8 +152,26 @@ private fun LauncherRoot() {
         ) {
             AppDrawer(
                 apps = apps,
+                homeGrid = homeGrid,
                 onClose = { drawerOpen = false },
             )
+        }
+    }
+}
+
+/**
+ * Drives the status / navigation bar icon colour. [lightIcons] true means white
+ * icons (for a dark backdrop), false means black icons (for a light one).
+ */
+@Composable
+private fun SystemBarIcons(lightIcons: Boolean) {
+    val view = LocalView.current
+    if (view.isInEditMode) return
+    val window = (view.context as? android.app.Activity)?.window ?: return
+    androidx.compose.runtime.SideEffect {
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !lightIcons
+            isAppearanceLightNavigationBars = !lightIcons
         }
     }
 }
@@ -131,14 +179,24 @@ private fun LauncherRoot() {
 /* ----------------------------- Home screen ------------------------------- */
 
 @Composable
-private fun HomeScreen(apps: List<AppInfo>, onOpenDrawer: () -> Unit) {
+private fun HomeScreen(
+    apps: List<AppInfo>,
+    widgets: WidgetState,
+    homeGrid: HomeGridState,
+    onOpenDrawer: () -> Unit,
+) {
     val density = LocalDensity.current
     val swipeThreshold = remember(density) { with(density) { 80.dp.toPx() } }
     var dragAmount by remember { mutableStateOf(0f) }
+    var menuAt by remember { mutableStateOf<Offset?>(null) }
+    val addWidget = rememberWidgetAdder(widgets)
 
     androidx.compose.foundation.layout.BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(onLongPress = { at -> menuAt = at })
+            }
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragStart = { dragAmount = 0f },
@@ -158,8 +216,9 @@ private fun HomeScreen(apps: List<AppInfo>, onOpenDrawer: () -> Unit) {
                 .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(40.dp))
-            AtAGlance()
+            Spacer(Modifier.height(24.dp))
+            WidgetPanel(widgets)
+            HomeIconGrid(state = homeGrid, apps = apps)
 
             Spacer(Modifier.weight(1f))
 
@@ -168,29 +227,57 @@ private fun HomeScreen(apps: List<AppInfo>, onOpenDrawer: () -> Unit) {
             Dock(apps = pickDockApps(apps, dockCount))
             Spacer(Modifier.height(12.dp))
         }
+
+        menuAt?.let { at ->
+            HomeMenu(
+                at = at,
+                onAddWidget = addWidget,
+                onDismiss = { menuAt = null },
+            )
+        }
     }
 }
 
-/** Pixel-style "At a Glance": a large clock and the date. */
+/**
+ * Pixel-style long-press menu: a small floating popup at the touch point with
+ * the home screen actions.
+ */
 @Composable
-private fun AtAGlance() {
-    val now by rememberTicker()
-    val time = remember { SimpleDateFormat("h:mm", Locale.getDefault()) }
-    val date = remember { SimpleDateFormat("EEE, MMM d", Locale.getDefault()) }
-    val onWallpaper = TextStyle(
-        color = Color.White,
-        shadow = Shadow(color = Color.Black.copy(alpha = 0.55f), blurRadius = 12f),
-    )
+private fun HomeMenu(at: Offset, onAddWidget: () -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    Popup(
+        offset = IntOffset(at.x.toInt(), at.y.toInt()),
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 3.dp,
+            shadowElevation = 8.dp,
+        ) {
+            Column(Modifier.width(220.dp).padding(vertical = 8.dp)) {
+                HomeMenuItem("Wallpaper & style") {
+                    onDismiss()
+                    openWallpaperPicker(context)
+                }
+                HomeMenuItem("Widgets") {
+                    onDismiss()
+                    onAddWidget()
+                }
+            }
+        }
+    }
+}
 
-    Column(horizontalAlignment = Alignment.Start, modifier = Modifier.fillMaxWidth()) {
+@Composable
+private fun HomeMenuItem(label: String, onClick: () -> Unit) {
+    Surface(onClick = onClick, color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = time.format(now.time),
-            style = onWallpaper.copy(fontSize = 72.sp, fontWeight = FontWeight.Light),
-        )
-        Text(
-            text = date.format(now.time),
-            style = onWallpaper.copy(fontSize = 18.sp, fontWeight = FontWeight.Medium),
-            modifier = Modifier.padding(start = 4.dp),
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
         )
     }
 }
@@ -246,7 +333,7 @@ private fun Dock(apps: List<AppInfo>) {
 /* ----------------------------- App drawer -------------------------------- */
 
 @Composable
-private fun AppDrawer(apps: List<AppInfo>?, onClose: () -> Unit) {
+private fun AppDrawer(apps: List<AppInfo>?, homeGrid: HomeGridState, onClose: () -> Unit) {
     val density = LocalDensity.current
     val closeThreshold = remember(density) { with(density) { 80.dp.toPx() } }
     var dragAmount by remember { mutableStateOf(0f) }
@@ -298,6 +385,10 @@ private fun AppDrawer(apps: List<AppInfo>?, onClose: () -> Unit) {
                             showLabel = true,
                             iconSize = LauncherConfig.DRAWER_ICON,
                             onLaunched = onClose,
+                            onAddToHome = {
+                                homeGrid.pin(app.packageName, app.activityName)
+                                onClose()
+                            },
                         )
                     }
                 }
@@ -359,8 +450,10 @@ private fun AppIcon(
     showLabel: Boolean,
     iconSize: androidx.compose.ui.unit.Dp,
     onLaunched: () -> Unit = {},
+    onAddToHome: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    var menuOpen by remember { mutableStateOf(false) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -370,7 +463,7 @@ private fun AppIcon(
                     launchApp(context, app)
                     onLaunched()
                 },
-                onLongClick = { openAppInfo(context, app.packageName) },
+                onLongClick = { menuOpen = true },
             )
             .padding(vertical = 6.dp, horizontal = 4.dp),
     ) {
@@ -393,20 +486,29 @@ private fun AppIcon(
                 textAlign = TextAlign.Center,
             )
         }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            if (onAddToHome != null) {
+                DropdownMenuItem(
+                    text = { Text("Add to Home screen") },
+                    onClick = {
+                        menuOpen = false
+                        onAddToHome()
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("App info") },
+                onClick = {
+                    menuOpen = false
+                    openAppInfo(context, app.packageName)
+                },
+            )
+        }
     }
 }
 
 /* ------------------------------- Helpers --------------------------------- */
-
-/** Recomposes once a second so the clock stays current. */
-@Composable
-private fun rememberTicker(): State<Calendar> {
-    val state = remember { mutableStateOf(Calendar.getInstance()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            state.value = Calendar.getInstance()
-            delay(1000)
-        }
-    }
-    return state
-}
