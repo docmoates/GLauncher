@@ -102,9 +102,10 @@ private const val KEY_HEIGHT = "widget_height_"
 private const val KEY_WIDTH = "widget_width_"
 private const val DEFAULT_HEIGHT_DP = 160
 private const val MIN_HEIGHT_DP = 80
-private const val MAX_HEIGHT_DP = 480
-/** Widgets may be narrowed to this fraction of the panel width, but no further. */
-private const val MIN_WIDTH_FRACTION = 0.4f
+private const val MAX_HEIGHT_DP = 640
+private const val MIN_WIDTH_DP = 100
+/** A widget never shrinks below this share of the panel width. */
+private const val MIN_WIDTH_FRACTION = 0.25f
 /** WidgetsTableUtils.MAX_ITEMS_IN_ROW: widgets are tabled 3 across. */
 private const val WIDGETS_PER_ROW = 3
 
@@ -232,7 +233,7 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
     val ids: List<Int> get() = _slots.flatten()
 
     private val heights = mutableStateMapOf<Int, Int>()
-    private val widths = mutableStateMapOf<Int, Float>()
+    private val widths = mutableStateMapOf<Int, Int>()
 
     init {
         // Drop ids whose provider was uninstalled while we were away, and any
@@ -251,23 +252,46 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
         info(id)?.loadLabel(appContext.packageManager)?.toString() ?: "Widget"
 
     fun heightDp(id: Int): Int =
-        heights[id] ?: prefs.getInt(KEY_HEIGHT + id, DEFAULT_HEIGHT_DP)
+        heights[id] ?: prefs.getInt(KEY_HEIGHT + id, naturalHeightDp(id))
 
-    /** How much of the panel width a widget occupies, 0.4f..1f. */
-    fun widthFraction(id: Int): Float =
-        widths[id] ?: prefs.getFloat(KEY_WIDTH + id, 1f)
+    /** The widget's requested width in dp; defaults to what its provider declares. */
+    fun widthDp(id: Int): Int =
+        widths[id] ?: prefs.getInt(KEY_WIDTH + id, naturalWidthDp(id))
 
     /** Narrows or widens a widget while a side resize handle is dragged. */
-    fun resizeWidth(id: Int, deltaFraction: Float) {
-        val next = (widthFraction(id) + deltaFraction).coerceIn(MIN_WIDTH_FRACTION, 1f)
+    fun resizeWidth(id: Int, deltaDp: Int) {
+        val next = (widthDp(id) + deltaDp).coerceAtLeast(MIN_WIDTH_DP)
         // Everything sharing a slot keeps one footprint -- that identical size
         // is what lets the flip between them look seamless.
-        slotMembers(id).forEach { setWidthFraction(it, next) }
+        slotMembers(id).forEach { setWidthDp(it, next) }
     }
 
-    private fun setWidthFraction(id: Int, value: Float) {
+    private fun setWidthDp(id: Int, value: Int) {
         widths[id] = value
-        prefs.edit().putFloat(KEY_WIDTH + id, value).apply()
+        prefs.edit().putInt(KEY_WIDTH + id, value).apply()
+    }
+
+    private val density: Float get() = appContext.resources.displayMetrics.density
+
+    /**
+     * AppWidgetProviderInfo.minWidth/minHeight are in PIXELS, so they have to be
+     * converted before being used as dp. Sizing widgets from these is what stops
+     * them rendering squashed: a widget forced well under its declared size just
+     * crushes its own layout.
+     */
+    private fun naturalWidthDp(id: Int): Int =
+        info(id)?.let { (it.minWidth / density).toInt() }?.coerceAtLeast(MIN_WIDTH_DP)
+            ?: MIN_WIDTH_DP
+
+    private fun naturalHeightDp(id: Int): Int =
+        info(id)?.let { (it.minHeight / density).toInt() }
+            ?.coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP)
+            ?: DEFAULT_HEIGHT_DP
+
+    /** Gives a freshly placed widget the size its provider asks for. */
+    private fun applyNaturalSize(id: Int) {
+        setHeightDp(id, naturalHeightDp(id))
+        setWidthDp(id, naturalWidthDp(id))
     }
 
     private fun setHeightDp(id: Int, value: Int) {
@@ -301,6 +325,7 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
     fun add(id: Int) {
         if (id !in ids) {
             _slots.add(listOf(id))
+            applyNaturalSize(id)
             persist()
         }
     }
@@ -318,10 +343,17 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
             return
         }
         _slots[index] = _slots[index] + newId
-        // Stacks only hold same-size widgets, so an incoming widget takes on
-        // the stack's existing footprint rather than its own natural one.
-        setHeightDp(newId, heightDp(existingId))
-        setWidthFraction(newId, widthFraction(existingId))
+        applyNaturalSize(newId)
+        // Stacks hold one shared footprint. Size it to the largest member
+        // rather than the anchor, so joining a stack never crushes a widget
+        // below the size its provider asked for.
+        val members = _slots[index]
+        val sharedHeight = members.maxOf { heightDp(it) }
+        val sharedWidth = members.maxOf { widthDp(it) }
+        members.forEach {
+            setHeightDp(it, sharedHeight)
+            setWidthDp(it, sharedWidth)
+        }
         persist()
     }
 
@@ -515,7 +547,13 @@ fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
             .then(
                 if (resizeModeActive) {
                     Modifier.pointerInput(resizingId) {
-                        detectTapGestures(onTap = { resizingId = -1 })
+                        detectTapGestures(
+                            // Claim long presses too. Without this, the release
+                            // of the very long press that opened resize mode is
+                            // reported as a tap and closes it again instantly.
+                            onLongPress = {},
+                            onTap = { resizingId = -1 },
+                        )
                     }
                 } else {
                     Modifier
@@ -722,7 +760,7 @@ private fun HostedWidget(
     // into whole-dp resize steps instead of being truncated away every frame.
     var topRemainder by remember(id) { mutableStateOf(0f) }
     var bottomRemainder by remember(id) { mutableStateOf(0f) }
-    val widthFraction = state.widthFraction(id)
+    val requestedWidthDp = state.widthDp(id)
     // Side handles report px; converting against the panel width keeps the
     // fraction-based width model independent of screen size.
     var panelWidthPx by remember(id) { mutableStateOf(1f) }
@@ -734,6 +772,9 @@ private fun HostedWidget(
             .onSizeChanged { panelWidthPx = it.width.toFloat().coerceAtLeast(1f) },
         contentAlignment = Alignment.Center,
     ) {
+      val widthFraction = with(density) {
+          (requestedWidthDp.dp.toPx() / panelWidthPx).coerceIn(MIN_WIDTH_FRACTION, 1f)
+      }
       Box(
         modifier = Modifier
             .fillMaxWidth(widthFraction)
@@ -794,8 +835,12 @@ private fun HostedWidget(
                 onStack = onAddToStack,
                 onReconfigure = onReconfigure.takeIf { info.configure != null },
                 onMove = onMove,
-                onDragLeftPx = { deltaPx -> state.resizeWidth(id, -deltaPx / panelWidthPx) },
-                onDragRightPx = { deltaPx -> state.resizeWidth(id, deltaPx / panelWidthPx) },
+                onDragLeftPx = { deltaPx ->
+                    state.resizeWidth(id, -with(density) { deltaPx.toDp().value }.toInt())
+                },
+                onDragRightPx = { deltaPx ->
+                    state.resizeWidth(id, with(density) { deltaPx.toDp().value }.toInt())
+                },
             )
         }
       }
@@ -1048,6 +1093,7 @@ private suspend fun loadWidgetPickerGroups(context: Context): List<WidgetPickerG
     withContext(Dispatchers.IO) {
         val pm = context.packageManager
         val manager = AppWidgetManager.getInstance(context)
+        val displayDensity = context.resources.displayMetrics.density
         val iconCache = mutableMapOf<String, ImageBitmap?>()
         val labelCache = mutableMapOf<String, String>()
 
@@ -1073,8 +1119,8 @@ private suspend fun loadWidgetPickerGroups(context: Context): List<WidgetPickerG
                         provider = provider,
                         label = label,
                         preview = preview,
-                        cellWidthDp = provider.minWidth,
-                        cellHeightDp = provider.minHeight,
+                        cellWidthDp = (provider.minWidth / displayDensity).toInt(),
+                        cellHeightDp = (provider.minHeight / displayDensity).toInt(),
                     )
                 }.sortedBy { it.label.lowercase() }
                 WidgetPickerGroup(
