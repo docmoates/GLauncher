@@ -8,17 +8,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +32,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -53,15 +50,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalContext
@@ -75,6 +76,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.core.view.WindowCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
@@ -128,32 +130,46 @@ private fun LauncherRoot(widgetHost: AppWidgetHost) {
     val apps by produceState<List<AppInfo>?>(initialValue = null) {
         value = withContext(Dispatchers.IO) { loadApps(context) }
     }
-    var drawerOpen by remember { mutableStateOf(false) }
     val widgets = rememberWidgetState(widgetHost)
     val homeGrid = rememberHomeGridState()
+    val swipe = rememberAllAppsSwipeState()
+    val scope = rememberCoroutineScope()
 
     // White bar icons over the wallpaper; in the app drawer follow the theme so
     // they stay readable against its opaque surface.
-    SystemBarIcons(lightIcons = !drawerOpen || isSystemInDarkTheme())
+    SystemBarIcons(lightIcons = !swipe.isOpen || isSystemInDarkTheme())
 
-    BackHandler(enabled = drawerOpen) { drawerOpen = false }
+    BackHandler(enabled = swipe.isOpen) { scope.launch { swipe.close() } }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            // The drawer travels the full height of the launcher; this is
+            // Launcher3's shiftRange.
+            .onSizeChanged { swipe.shiftRangePx = it.height.toFloat() },
+    ) {
         HomeScreen(
             apps = apps.orEmpty(),
             widgets = widgets,
             homeGrid = homeGrid,
-            onOpenDrawer = { drawerOpen = true },
+            swipe = swipe,
+            onOpenDrawer = { scope.launch { swipe.open() } },
         )
-        AnimatedVisibility(
-            visible = drawerOpen,
-            enter = slideInVertically { it } + fadeIn(),
-            exit = slideOutVertically { it } + fadeOut(),
-        ) {
+
+        if (!swipe.isFullyClosed) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f * swipe.scrimAlpha)),
+            )
             AppDrawer(
                 apps = apps,
                 homeGrid = homeGrid,
-                onClose = { drawerOpen = false },
+                swipe = swipe,
+                onClose = { scope.launch { swipe.close() } },
+                modifier = Modifier.graphicsLayer {
+                    translationY = swipe.progress.value * swipe.shiftRangePx
+                },
             )
         }
     }
@@ -183,11 +199,10 @@ private fun HomeScreen(
     apps: List<AppInfo>,
     widgets: WidgetState,
     homeGrid: HomeGridState,
+    swipe: AllAppsSwipeState,
     onOpenDrawer: () -> Unit,
 ) {
-    val density = LocalDensity.current
-    val swipeThreshold = remember(density) { with(density) { 80.dp.toPx() } }
-    var dragAmount by remember { mutableStateOf(0f) }
+    val scope = rememberCoroutineScope()
     var menuAt by remember { mutableStateOf<Offset?>(null) }
     val addWidget = rememberWidgetAdder(widgets)
 
@@ -197,13 +212,12 @@ private fun HomeScreen(
             .pointerInput(Unit) {
                 detectTapGestures(onLongPress = { at -> menuAt = at })
             }
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragStart = { dragAmount = 0f },
-                    onDragEnd = { if (dragAmount < -swipeThreshold) onOpenDrawer() },
-                    onVerticalDrag = { _, dy -> dragAmount += dy },
-                )
-            },
+            // Swipe up follows the finger straight into the app drawer.
+            .draggable(
+                orientation = AllAppsDragOrientation,
+                state = rememberDraggableState { dy -> scope.launch { swipe.dragBy(dy) } },
+                onDragStopped = { velocity -> swipe.settle(velocity) },
+            ),
     ) {
         val wide = maxWidth >= LauncherConfig.WIDE_SCREEN_BREAKPOINT
         val dockCount =
@@ -333,11 +347,22 @@ private fun Dock(apps: List<AppInfo>) {
 /* ----------------------------- App drawer -------------------------------- */
 
 @Composable
-private fun AppDrawer(apps: List<AppInfo>?, homeGrid: HomeGridState, onClose: () -> Unit) {
-    val density = LocalDensity.current
-    val closeThreshold = remember(density) { with(density) { 80.dp.toPx() } }
-    var dragAmount by remember { mutableStateOf(0f) }
+private fun AppDrawer(
+    apps: List<AppInfo>?,
+    homeGrid: HomeGridState,
+    swipe: AllAppsSwipeState,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
+    val gridState = rememberLazyGridState()
+    val nestedScrollConnection = rememberDrawerNestedScroll(
+        state = swipe,
+        gridState = gridState,
+        onDrag = { dy -> scope.launch { swipe.dragBy(dy) } },
+        onSettle = { velocity -> scope.launch { swipe.settle(velocity) } },
+    )
 
     val filtered = remember(apps, query) {
         val all = apps.orEmpty()
@@ -347,21 +372,18 @@ private fun AppDrawer(apps: List<AppInfo>?, homeGrid: HomeGridState, onClose: ()
 
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragStart = { dragAmount = 0f },
-                    onDragEnd = { if (dragAmount > closeThreshold) onClose() },
-                    onVerticalDrag = { _, dy -> dragAmount += dy },
-                )
-            },
+            .nestedScroll(nestedScrollConnection),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp)
+                // Contents fade in late in the gesture, the way Launcher3
+                // clamps the all-apps content fade.
+                .graphicsLayer { alpha = swipe.contentAlpha },
         ) {
             Spacer(Modifier.height(8.dp))
             DrawerSearchField(query = query, onQueryChange = { query = it })
@@ -374,6 +396,7 @@ private fun AppDrawer(apps: List<AppInfo>?, homeGrid: HomeGridState, onClose: ()
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(LauncherConfig.DRAWER_ICON_MIN),
+                    state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
