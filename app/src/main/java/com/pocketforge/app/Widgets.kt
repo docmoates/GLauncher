@@ -114,6 +114,16 @@ private const val MIN_WIDTH_FRACTION = 0.25f
 /** WidgetsTableUtils.MAX_ITEMS_IN_ROW: widgets are tabled 3 across. */
 private const val WIDGETS_PER_ROW = 3
 
+/* Resize frame metrics, taken from Launcher3's app_widget_resize_frame.xml:
+ * the handle asset ic_widget_resize_handle is 19dp (76px at xxxhdpi), the
+ * frame is a 2dp stroke at the system widget background radius, and
+ * widget_handle_margin (13dp) against resize_frame_margin (23dp) puts each
+ * handle's centre on the frame line rather than outside it. */
+private val RESIZE_DOT_SIZE = 19.dp
+private val RESIZE_DOT_TOUCH_TARGET = 48.dp
+private val RESIZE_FRAME_STROKE = 2.dp
+private val RESIZE_FRAME_RADIUS = 28.dp
+
 /**
  * The set of native app widgets placed on the home screen, persisted across
  * launches. Widget ids are owned by [host]; dropping one here also releases it
@@ -1034,28 +1044,32 @@ private fun ResizeFrameOverlay(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(heightDp.dp)
-                .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(20.dp))
+                .border(
+                    RESIZE_FRAME_STROKE,
+                    MaterialTheme.colorScheme.primary,
+                    RoundedCornerShape(RESIZE_FRAME_RADIUS),
+                )
                 .pointerInput(Unit) {
                     detectTapGestures(onLongPress = {}, onTap = { onTapInside() })
                 },
         )
         DotHandle(
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = (-12).dp),
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = -(RESIZE_DOT_TOUCH_TARGET / 2)),
             vertical = true,
             onDrag = onDragTopPx,
         )
         DotHandle(
-            modifier = Modifier.align(Alignment.BottomCenter).offset(y = 12.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).offset(y = (RESIZE_DOT_TOUCH_TARGET / 2)),
             vertical = true,
             onDrag = onDragBottomPx,
         )
         DotHandle(
-            modifier = Modifier.align(Alignment.CenterStart).offset(x = (-12).dp),
+            modifier = Modifier.align(Alignment.CenterStart).offset(x = -(RESIZE_DOT_TOUCH_TARGET / 2)),
             vertical = false,
             onDrag = onDragLeftPx,
         )
         DotHandle(
-            modifier = Modifier.align(Alignment.CenterEnd).offset(x = 12.dp),
+            modifier = Modifier.align(Alignment.CenterEnd).offset(x = (RESIZE_DOT_TOUCH_TARGET / 2)),
             vertical = false,
             onDrag = onDragRightPx,
         )
@@ -1072,7 +1086,7 @@ private fun DotHandle(
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(48.dp)
+            .size(RESIZE_DOT_TOUCH_TARGET)
             .pointerInput(vertical) {
                 if (vertical) {
                     detectVerticalDragGestures(
@@ -1093,7 +1107,7 @@ private fun DotHandle(
     ) {
         Box(
             modifier = Modifier
-                .size(20.dp)
+                .size(RESIZE_DOT_SIZE)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary),
         )
