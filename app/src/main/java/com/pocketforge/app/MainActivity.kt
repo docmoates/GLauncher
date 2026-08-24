@@ -267,7 +267,7 @@ private fun HomeScreen(
         menuAt?.let { at ->
             HomeMenu(
                 at = at,
-                onAddWidget = addWidget,
+                onAddWidget = { addWidget(-1) },
                 onOpenSettings = onOpenSettings,
                 onDismiss = { menuAt = null },
             )

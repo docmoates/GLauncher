@@ -135,7 +135,18 @@ class LauncherWidgetHost(context: Context, hostId: Int) : AppWidgetHost(context,
 class LongPressWidgetHostView(context: Context) : AppWidgetHostView(context) {
     var onLongPressListener: (() -> Unit)? = null
 
+    /**
+     * Set only for widgets that share a slot. Receives the total vertical
+     * distance of a swipe once the finger lifts; negative is upward.
+     *
+     * Like the long press above, this has to be intercepted here rather than
+     * with a Compose gesture on a parent: RemoteViews consume the touch
+     * stream, so a draggable() wrapped around the host view never sees it.
+     */
+    var onStackSwipe: ((Float) -> Unit)? = null
+
     private var longPressFired = false
+    private var swiping = false
     private var downX = 0f
     private var downY = 0f
     private val fireLongPress = Runnable {
@@ -148,17 +159,39 @@ class LongPressWidgetHostView(context: Context) : AppWidgetHostView(context) {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 longPressFired = false
+                swiping = false
                 downX = ev.x
                 downY = ev.y
+                // On a stacked widget the vertical drag belongs to the flip, so
+                // stop ancestors claiming it first -- otherwise the home
+                // screen's swipe-up-to-all-apps wins the gesture. Compose
+                // honours this through AndroidComposeView.
+                if (onStackSwipe != null) {
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                }
                 postDelayed(fireLongPress, ViewConfiguration.getLongPressTimeout().toLong())
             }
-            MotionEvent.ACTION_MOVE ->
-                if (abs(ev.x - downX) > slop || abs(ev.y - downY) > slop) {
+            MotionEvent.ACTION_MOVE -> {
+                val dx = abs(ev.x - downX)
+                val dy = abs(ev.y - downY)
+                if (dx > slop || dy > slop) {
                     removeCallbacks(fireLongPress)
                 }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> removeCallbacks(fireLongPress)
+                // Only claim the gesture for a stack flip once it is clearly a
+                // deliberate vertical drag, so a widget's own content still
+                // gets ordinary taps and horizontal gestures.
+                if (onStackSwipe != null && dy > slop * 2 && dy > dx) {
+                    swiping = true
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(fireLongPress)
+                if (onStackSwipe != null) {
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                }
+            }
         }
-        return longPressFired
+        return longPressFired || swiping
     }
 
     override fun onTouchEvent(ev: MotionEvent): Boolean {
@@ -166,6 +199,17 @@ class LongPressWidgetHostView(context: Context) : AppWidgetHostView(context) {
         // event); swallow the remainder of a long-press gesture.
         if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
             removeCallbacks(fireLongPress)
+        }
+        if (swiping) {
+            if (ev.actionMasked == MotionEvent.ACTION_UP) {
+                onStackSwipe?.invoke(ev.y - downY)
+            }
+            if (ev.actionMasked == MotionEvent.ACTION_UP ||
+                ev.actionMasked == MotionEvent.ACTION_CANCEL
+            ) {
+                swiping = false
+            }
+            return true
         }
         return longPressFired || super.onTouchEvent(ev)
     }
@@ -216,9 +260,24 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
     /** Narrows or widens a widget while a side resize handle is dragged. */
     fun resizeWidth(id: Int, deltaFraction: Float) {
         val next = (widthFraction(id) + deltaFraction).coerceIn(MIN_WIDTH_FRACTION, 1f)
-        widths[id] = next
-        prefs.edit().putFloat(KEY_WIDTH + id, next).apply()
+        // Everything sharing a slot keeps one footprint -- that identical size
+        // is what lets the flip between them look seamless.
+        slotMembers(id).forEach { setWidthFraction(it, next) }
     }
+
+    private fun setWidthFraction(id: Int, value: Float) {
+        widths[id] = value
+        prefs.edit().putFloat(KEY_WIDTH + id, value).apply()
+    }
+
+    private fun setHeightDp(id: Int, value: Int) {
+        heights[id] = value
+        prefs.edit().putInt(KEY_HEIGHT + id, value).apply()
+    }
+
+    /** Every widget sharing a home-screen slot with [id], including itself. */
+    private fun slotMembers(id: Int): List<Int> =
+        _slots.firstOrNull { id in it } ?: listOf(id)
 
     /** Index of the home-screen slot holding [id], or -1. */
     fun slotIndexOf(id: Int): Int = _slots.indexOfFirst { id in it }
@@ -235,8 +294,7 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
      *  continuously while the user drags a resize handle, so small deltas are fine. */
     fun resize(id: Int, deltaDp: Int) {
         val next = (heightDp(id) + deltaDp).coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP)
-        heights[id] = next
-        prefs.edit().putInt(KEY_HEIGHT + id, next).apply()
+        slotMembers(id).forEach { setHeightDp(it, next) }
     }
 
     /** Places [id] on the home screen as its own new slot. */
@@ -260,6 +318,10 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
             return
         }
         _slots[index] = _slots[index] + newId
+        // Stacks only hold same-size widgets, so an incoming widget takes on
+        // the stack's existing footprint rather than its own natural one.
+        setHeightDp(newId, heightDp(existingId))
+        setWidthFraction(newId, widthFraction(existingId))
         persist()
     }
 
@@ -301,8 +363,17 @@ fun rememberWidgetState(host: AppWidgetHost): WidgetState {
     return remember(host) { WidgetState(context, host) }
 }
 
-/** One widget id whose bind result we're waiting on via the system bind prompt. */
-private data class PendingBind(val id: Int, val provider: AppWidgetProviderInfo)
+/**
+ * One widget id whose bind result we're waiting on via the system bind prompt.
+ * [anchorId] is the widget it should stack onto, or -1 to stand alone -- it
+ * travels with the request because the bind and configure steps bounce through
+ * other activities before the result comes back.
+ */
+private data class PendingBind(
+    val id: Int,
+    val provider: AppWidgetProviderInfo,
+    val anchorId: Int,
+)
 
 /**
  * Returns a callback that opens the in-app widget picker. Picking a widget
@@ -312,34 +383,39 @@ private data class PendingBind(val id: Int, val provider: AppWidgetProviderInfo)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun rememberWidgetAdder(state: WidgetState, onBound: (Int) -> Unit = { state.add(it) }): () -> Unit {
+fun rememberWidgetAdder(
+    state: WidgetState,
+    onBound: (anchorId: Int, newId: Int) -> Unit = { _, newId -> state.add(newId) },
+): (Int) -> Unit {
     var pickerOpen by remember { mutableStateOf(false) }
     var pendingBind by remember { mutableStateOf<PendingBind?>(null) }
-    var pendingConfigureId by remember { mutableStateOf(-1) }
+    var pendingConfigure by remember { mutableStateOf<PendingBind?>(null) }
+    // Anchor for the pick currently in flight; -1 means "place standalone".
+    var anchorForPick by remember { mutableStateOf(-1) }
 
     val configureLauncher = rememberLauncherForActivityResult(StartActivityForResult()) { result ->
-        val id = pendingConfigureId
-        pendingConfigureId = -1
-        if (id == -1) return@rememberLauncherForActivityResult
-        if (result.resultCode == Activity.RESULT_OK) onBound(id)
-        else runCatching { state.host.deleteAppWidgetId(id) }
+        val pending = pendingConfigure
+        pendingConfigure = null
+        if (pending == null) return@rememberLauncherForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) onBound(pending.anchorId, pending.id)
+        else runCatching { state.host.deleteAppWidgetId(pending.id) }
     }
 
-    fun proceedAfterBind(id: Int, provider: AppWidgetProviderInfo) {
+    fun proceedAfterBind(id: Int, provider: AppWidgetProviderInfo, anchorId: Int) {
         val configureComponent = provider.configure
         if (configureComponent == null) {
-            onBound(id)
+            onBound(anchorId, id)
             return
         }
-        pendingConfigureId = id
+        pendingConfigure = PendingBind(id, provider, anchorId)
         val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE)
             .setComponent(configureComponent)
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
         // Some configuration activities aren't exported to third-party hosts;
         // in that case just place the widget with its defaults.
         runCatching { configureLauncher.launch(intent) }.onFailure {
-            pendingConfigureId = -1
-            state.add(id)
+            pendingConfigure = null
+            onBound(anchorId, id)
         }
     }
 
@@ -348,21 +424,21 @@ fun rememberWidgetAdder(state: WidgetState, onBound: (Int) -> Unit = { state.add
         pendingBind = null
         if (pending == null) return@rememberLauncherForActivityResult
         if (result.resultCode == Activity.RESULT_OK) {
-            proceedAfterBind(pending.id, pending.provider)
+            proceedAfterBind(pending.id, pending.provider, pending.anchorId)
         } else {
             runCatching { state.host.deleteAppWidgetId(pending.id) }
         }
     }
 
-    fun startBind(provider: AppWidgetProviderInfo) {
+    fun startBind(provider: AppWidgetProviderInfo, anchorId: Int) {
         val id = state.host.allocateAppWidgetId()
         val bound = runCatching {
             state.manager.bindAppWidgetIdIfAllowed(id, provider.provider)
         }.getOrDefault(false)
         if (bound) {
-            proceedAfterBind(id, provider)
+            proceedAfterBind(id, provider, anchorId)
         } else {
-            pendingBind = PendingBind(id, provider)
+            pendingBind = PendingBind(id, provider, anchorId)
             val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND)
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider.provider)
@@ -378,12 +454,15 @@ fun rememberWidgetAdder(state: WidgetState, onBound: (Int) -> Unit = { state.add
             onDismiss = { pickerOpen = false },
             onPick = { provider ->
                 pickerOpen = false
-                startBind(provider)
+                startBind(provider, anchorForPick)
             },
         )
     }
 
-    return { pickerOpen = true }
+    return { anchorId ->
+        anchorForPick = anchorId
+        pickerOpen = true
+    }
 }
 
 /**
@@ -418,10 +497,8 @@ fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
     // Reused for the "stack with another widget" action inside resize mode;
     // whatever gets picked is appended to this slot instead of becoming its
     // own standalone widget.
-    var stackTargetId by remember { mutableStateOf(-1) }
-    val stackAdder = rememberWidgetAdder(state) { newId ->
-        state.addToStack(stackTargetId, newId)
-        stackTargetId = -1
+    val stackAdder = rememberWidgetAdder(state) { anchorId, newId ->
+        if (anchorId == -1) state.add(newId) else state.addToStack(anchorId, newId)
     }
     val reconfigure = rememberWidgetReconfigurer(state)
 
@@ -456,10 +533,7 @@ fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
                         resizeModeActive = resizeModeActive,
                         onLongPress = { resizingId = id },
                         onExitResize = { resizingId = -1 },
-                        onAddToStack = {
-                            stackTargetId = id
-                            stackAdder()
-                        },
+                        onAddToStack = { stackAdder(id) },
                         onReconfigure = { reconfigure(id) },
                         onMove = { delta -> moveWidgetSlot(state, id, delta) },
                     )
@@ -471,10 +545,7 @@ fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
                         resizeModeActive = resizeModeActive,
                         onLongPress = { id -> resizingId = id },
                         onExitResize = { resizingId = -1 },
-                        onAddToStack = { id ->
-                            stackTargetId = id
-                            stackAdder()
-                        },
+                        onAddToStack = { id -> stackAdder(id) },
                         onReconfigure = { id -> reconfigure(id) },
                         onMove = { id, delta -> moveWidgetSlot(state, id, delta) },
                     )
@@ -510,6 +581,9 @@ private fun StackedWidget(
     var currentIndex by remember(ids.first()) { mutableIntStateOf(0) }
     val safeIndex = currentIndex.coerceIn(0, ids.lastIndex)
     var dragAccumulatorPx by remember(ids.first()) { mutableFloatStateOf(0f) }
+    // Which way the last flip went, so the animation slides the way the
+    // finger did instead of always coming up from the bottom.
+    var flippingForward by remember(ids.first()) { mutableStateOf(true) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -517,10 +591,21 @@ private fun StackedWidget(
                 .fillMaxWidth()
                 .draggable(
                     orientation = Orientation.Vertical,
+                    // While a widget is being resized the frame owns the drag.
+                    enabled = !resizeModeActive,
                     state = rememberDraggableState { delta -> dragAccumulatorPx += delta },
                     onDragStopped = {
-                        if (dragAccumulatorPx <= -SWAP_DRAG_THRESHOLD_PX) {
-                            currentIndex = (safeIndex + 1) % ids.size
+                        when {
+                            // Swipe up: next widget in the stack.
+                            dragAccumulatorPx <= -SWAP_DRAG_THRESHOLD_PX -> {
+                                flippingForward = true
+                                currentIndex = (safeIndex + 1) % ids.size
+                            }
+                            // Swipe down: previous one, wrapping backwards.
+                            dragAccumulatorPx >= SWAP_DRAG_THRESHOLD_PX -> {
+                                flippingForward = false
+                                currentIndex = (safeIndex - 1 + ids.size) % ids.size
+                            }
                         }
                         dragAccumulatorPx = 0f
                     },
@@ -529,8 +614,13 @@ private fun StackedWidget(
             AnimatedContent(
                 targetState = safeIndex,
                 transitionSpec = {
-                    (slideInVertically(animationSpec = tween(220)) { h -> h } togetherWith
-                        slideOutVertically(animationSpec = tween(220)) { h -> -h })
+                    if (flippingForward) {
+                        slideInVertically(animationSpec = tween(220)) { h -> h } togetherWith
+                            slideOutVertically(animationSpec = tween(220)) { h -> -h }
+                    } else {
+                        slideInVertically(animationSpec = tween(220)) { h -> -h } togetherWith
+                            slideOutVertically(animationSpec = tween(220)) { h -> h }
+                    }
                 },
                 label = "widget-stack-swap",
             ) { index ->
@@ -545,6 +635,18 @@ private fun StackedWidget(
                     onAddToStack = { onAddToStack(id) },
                     onReconfigure = { onReconfigure(id) },
                     onMove = { delta -> onMove(id, delta) },
+                    onStackSwipe = { totalDy ->
+                        when {
+                            totalDy <= -SWAP_DRAG_THRESHOLD_PX -> {
+                                flippingForward = true
+                                currentIndex = (safeIndex + 1) % ids.size
+                            }
+                            totalDy >= SWAP_DRAG_THRESHOLD_PX -> {
+                                flippingForward = false
+                                currentIndex = (safeIndex - 1 + ids.size) % ids.size
+                            }
+                        }
+                    },
                 )
             }
         }
@@ -591,6 +693,7 @@ private fun HostedWidget(
     onAddToStack: () -> Unit = {},
     onReconfigure: () -> Unit = {},
     onMove: (Int) -> Unit = {},
+    onStackSwipe: ((Float) -> Unit)? = null,
 ) {
     val info = state.info(id) ?: return
     val heightDp = state.heightDp(id)
@@ -613,6 +716,7 @@ private fun HostedWidget(
     // RemoteViews consume every touch, so a Compose long-press detector on a
     // parent never fires; the interception happens inside the host view.
     (view as? LongPressWidgetHostView)?.onLongPressListener = onLongPress
+    (view as? LongPressWidgetHostView)?.onStackSwipe = onStackSwipe
 
     // Fractional drag remainders so slow, small drag deltas still accumulate
     // into whole-dp resize steps instead of being truncated away every frame.
