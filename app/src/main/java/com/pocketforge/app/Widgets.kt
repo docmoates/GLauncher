@@ -25,6 +25,8 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +35,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -43,7 +46,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -67,14 +75,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
@@ -86,9 +99,14 @@ const val WIDGET_HOST_ID = 27713
 private const val PREFS = "glauncher"
 private const val KEY_IDS = "widget_ids"
 private const val KEY_HEIGHT = "widget_height_"
+private const val KEY_WIDTH = "widget_width_"
 private const val DEFAULT_HEIGHT_DP = 160
 private const val MIN_HEIGHT_DP = 80
 private const val MAX_HEIGHT_DP = 480
+/** Widgets may be narrowed to this fraction of the panel width, but no further. */
+private const val MIN_WIDTH_FRACTION = 0.4f
+/** WidgetsTableUtils.MAX_ITEMS_IN_ROW: widgets are tabled 3 across. */
+private const val WIDGETS_PER_ROW = 3
 
 /**
  * The set of native app widgets placed on the home screen, persisted across
@@ -170,6 +188,7 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
     val ids: List<Int> get() = _slots.flatten()
 
     private val heights = mutableStateMapOf<Int, Int>()
+    private val widths = mutableStateMapOf<Int, Float>()
 
     init {
         // Drop ids whose provider was uninstalled while we were away, and any
@@ -189,6 +208,28 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
 
     fun heightDp(id: Int): Int =
         heights[id] ?: prefs.getInt(KEY_HEIGHT + id, DEFAULT_HEIGHT_DP)
+
+    /** How much of the panel width a widget occupies, 0.4f..1f. */
+    fun widthFraction(id: Int): Float =
+        widths[id] ?: prefs.getFloat(KEY_WIDTH + id, 1f)
+
+    /** Narrows or widens a widget while a side resize handle is dragged. */
+    fun resizeWidth(id: Int, deltaFraction: Float) {
+        val next = (widthFraction(id) + deltaFraction).coerceIn(MIN_WIDTH_FRACTION, 1f)
+        widths[id] = next
+        prefs.edit().putFloat(KEY_WIDTH + id, next).apply()
+    }
+
+    /** Index of the home-screen slot holding [id], or -1. */
+    fun slotIndexOf(id: Int): Int = _slots.indexOfFirst { id in it }
+
+    /** Moves a whole slot up or down the panel. */
+    fun moveSlot(fromIndex: Int, toIndex: Int) {
+        if (fromIndex !in _slots.indices || toIndex !in _slots.indices) return
+        val slot = _slots.removeAt(fromIndex)
+        _slots.add(toIndex, slot)
+        persist()
+    }
 
     /** Adjusts a widget's height by [deltaDp], clamped to the allowed range. Called
      *  continuously while the user drags a resize handle, so small deltas are fine. */
@@ -228,7 +269,8 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
         val remaining = _slots[index] - id
         if (remaining.isEmpty()) _slots.removeAt(index) else _slots[index] = remaining
         heights.remove(id)
-        prefs.edit().remove(KEY_HEIGHT + id).apply()
+        widths.remove(id)
+        prefs.edit().remove(KEY_HEIGHT + id).remove(KEY_WIDTH + id).apply()
         runCatching { host.deleteAppWidgetId(id) }
         persist()
     }
@@ -345,6 +387,26 @@ fun rememberWidgetAdder(state: WidgetState, onBound: (Int) -> Unit = { state.add
 }
 
 /**
+ * Reopens a placed widget's own configuration screen, for providers that have
+ * one (Launcher3 exposes the same "reconfigure" action on a placed widget).
+ */
+@Composable
+fun rememberWidgetReconfigurer(state: WidgetState): (Int) -> Unit {
+    val launcher = rememberLauncherForActivityResult(StartActivityForResult()) { }
+    return remember(state, launcher) {
+        { id: Int ->
+            val configure = state.info(id)?.configure
+            if (configure != null) {
+                val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE)
+                    .setComponent(configure)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                runCatching { launcher.launch(intent) }
+            }
+        }
+    }
+}
+
+/**
  * Renders the placed widgets, top-aligned, the way a home screen page would.
  * Long-pressing a widget toggles Pixel-style "resize mode": a frame with drag
  * handles appears around it (drag to change height) plus a Remove chip, other
@@ -361,6 +423,7 @@ fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
         state.addToStack(stackTargetId, newId)
         stackTargetId = -1
     }
+    val reconfigure = rememberWidgetReconfigurer(state)
 
     // If the widget being resized gets removed from under us, fall out of
     // resize mode instead of pointing at a stale id.
@@ -397,6 +460,8 @@ fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
                             stackTargetId = id
                             stackAdder()
                         },
+                        onReconfigure = { reconfigure(id) },
+                        onMove = { delta -> moveWidgetSlot(state, id, delta) },
                     )
                 } else {
                     StackedWidget(
@@ -410,11 +475,20 @@ fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
                             stackTargetId = id
                             stackAdder()
                         },
+                        onReconfigure = { id -> reconfigure(id) },
+                        onMove = { id, delta -> moveWidgetSlot(state, id, delta) },
                     )
                 }
             }
         }
     }
+}
+
+/** Moves the slot containing [id] by [delta] positions, clamped to the panel. */
+private fun moveWidgetSlot(state: WidgetState, id: Int, delta: Int) {
+    val from = state.slotIndexOf(id)
+    if (from == -1) return
+    state.moveSlot(from, (from + delta).coerceIn(0, state.slots.lastIndex))
 }
 
 /**
@@ -430,6 +504,8 @@ private fun StackedWidget(
     onLongPress: (Int) -> Unit,
     onExitResize: () -> Unit,
     onAddToStack: (Int) -> Unit,
+    onReconfigure: (Int) -> Unit,
+    onMove: (Int, Int) -> Unit,
 ) {
     var currentIndex by remember(ids.first()) { mutableIntStateOf(0) }
     val safeIndex = currentIndex.coerceIn(0, ids.lastIndex)
@@ -467,6 +543,8 @@ private fun StackedWidget(
                     onLongPress = { onLongPress(id) },
                     onExitResize = onExitResize,
                     onAddToStack = { onAddToStack(id) },
+                    onReconfigure = { onReconfigure(id) },
+                    onMove = { delta -> onMove(id, delta) },
                 )
             }
         }
@@ -511,6 +589,8 @@ private fun HostedWidget(
     onLongPress: () -> Unit,
     onExitResize: () -> Unit = {},
     onAddToStack: () -> Unit = {},
+    onReconfigure: () -> Unit = {},
+    onMove: (Int) -> Unit = {},
 ) {
     val info = state.info(id) ?: return
     val heightDp = state.heightDp(id)
@@ -538,11 +618,21 @@ private fun HostedWidget(
     // into whole-dp resize steps instead of being truncated away every frame.
     var topRemainder by remember(id) { mutableStateOf(0f) }
     var bottomRemainder by remember(id) { mutableStateOf(0f) }
+    val widthFraction = state.widthFraction(id)
+    // Side handles report px; converting against the panel width keeps the
+    // fraction-based width model independent of screen size.
+    var panelWidthPx by remember(id) { mutableStateOf(1f) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
+            .onSizeChanged { panelWidthPx = it.width.toFloat().coerceAtLeast(1f) },
+        contentAlignment = Alignment.Center,
+    ) {
+      Box(
+        modifier = Modifier
+            .fillMaxWidth(widthFraction)
             .pointerInput(id) {
                 detectTapGestures(onLongPress = { onLongPress() })
             },
@@ -598,8 +688,13 @@ private fun HostedWidget(
                 onRemove = { state.remove(id) },
                 onTapInside = onExitResize,
                 onStack = onAddToStack,
+                onReconfigure = onReconfigure.takeIf { info.configure != null },
+                onMove = onMove,
+                onDragLeftPx = { deltaPx -> state.resizeWidth(id, -deltaPx / panelWidthPx) },
+                onDragRightPx = { deltaPx -> state.resizeWidth(id, deltaPx / panelWidthPx) },
             )
         }
+      }
     }
 }
 
@@ -643,6 +738,10 @@ private fun ResizeFrameOverlay(
     onRemove: () -> Unit,
     onTapInside: () -> Unit = {},
     onStack: () -> Unit = {},
+    onReconfigure: (() -> Unit)? = null,
+    onMove: (Int) -> Unit = {},
+    onDragLeftPx: (Float) -> Unit = {},
+    onDragRightPx: (Float) -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth().height(heightDp.dp)) {
         // While in resize mode the whole widget surface is a drag target
@@ -669,30 +768,18 @@ private fun ResizeFrameOverlay(
             modifier = Modifier.align(Alignment.TopCenter).offset(y = (-40).dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Surface(
-                onClick = onStack,
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.secondaryContainer,
-            ) {
-                Text(
-                    text = "Stack",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                )
+            if (onReconfigure != null) {
+                ResizeChip("Configure", onReconfigure)
             }
-            Surface(
-                onClick = onRemove,
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.errorContainer,
-            ) {
-                Text(
-                    text = "Remove",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                )
-            }
+            ResizeChip("Stack", onStack)
+            ResizeChip("Remove", onRemove, destructive = true)
+        }
+        Row(
+            modifier = Modifier.align(Alignment.BottomCenter).offset(y = 40.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ResizeChip("Move up", onClick = { onMove(-1) })
+            ResizeChip("Move down", onClick = { onMove(1) })
         }
         ResizeHandle(
             modifier = Modifier.align(Alignment.TopCenter).offset(y = (-6).dp),
@@ -701,6 +788,65 @@ private fun ResizeFrameOverlay(
         ResizeHandle(
             modifier = Modifier.align(Alignment.BottomCenter).offset(y = 6.dp),
             onDrag = onDragBottomPx,
+        )
+        // Side handles narrow/widen the widget, the horizontal counterpart of
+        // Launcher3's spanX resizing.
+        SideResizeHandle(
+            modifier = Modifier.align(Alignment.CenterStart).offset(x = (-6).dp),
+            onDrag = onDragLeftPx,
+        )
+        SideResizeHandle(
+            modifier = Modifier.align(Alignment.CenterEnd).offset(x = 6.dp),
+            onDrag = onDragRightPx,
+        )
+    }
+}
+
+@Composable
+private fun ResizeChip(label: String, onClick: () -> Unit, destructive: Boolean = false) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = if (destructive) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (destructive) {
+                MaterialTheme.colorScheme.onErrorContainer
+            } else {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            },
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+    }
+}
+
+/** Left/right counterpart of [ResizeHandle]; reports horizontal drag deltas. */
+@Composable
+private fun SideResizeHandle(modifier: Modifier = Modifier, onDrag: (Float) -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(width = 48.dp, height = 120.dp)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount)
+                    },
+                )
+            },
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 12.dp, height = 32.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.primary),
         )
     }
 }
@@ -734,6 +880,47 @@ private fun ResizeHandle(modifier: Modifier = Modifier, onDrag: (Float) -> Unit)
 }
 
 /* ------------------------------ In-app picker ----------------------------- */
+
+/** Search field at the top of the widget picker. */
+@Composable
+private fun WidgetSearchField(query: String, onQueryChange: (String) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(12.dp))
+            Box(Modifier.weight(1f)) {
+                if (query.isEmpty()) {
+                    Text(
+                        text = "Search widgets",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
 
 /** One installed widget provider, ready to display in the picker list. */
 private data class WidgetPickerItem(
@@ -817,6 +1004,8 @@ private fun WidgetPickerSheet(
     val groups by produceState<List<WidgetPickerGroup>?>(initialValue = null) {
         value = loadWidgetPickerGroups(context)
     }
+    var query by remember { mutableStateOf("") }
+    var expandedPackages by remember { mutableStateOf(emptySet<String>()) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -828,8 +1017,28 @@ private fun WidgetPickerSheet(
         ) {
             Text("Widgets", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
+            WidgetSearchField(query = query, onQueryChange = { query = it })
+            Spacer(Modifier.height(12.dp))
 
-            val loaded = groups
+            val loaded = groups?.let { all ->
+                val q = query.trim()
+                if (q.isEmpty()) {
+                    all
+                } else {
+                    // Match either the app or the individual widget, keeping
+                    // only the matching widgets within a group.
+                    all.mapNotNull { group ->
+                        if (group.appLabel.contains(q, ignoreCase = true)) {
+                            group
+                        } else {
+                            val items = group.items.filter {
+                                it.label.contains(q, ignoreCase = true)
+                            }
+                            if (items.isEmpty()) null else group.copy(items = items)
+                        }
+                    }
+                }
+            }
             when {
                 loaded == null -> {
                     Box(
@@ -844,26 +1053,50 @@ private fun WidgetPickerSheet(
                 }
                 loaded.isEmpty() -> {
                     Text(
-                        text = "No widgets available",
+                        text = if (query.isBlank()) {
+                            "No widgets available"
+                        } else {
+                            "No widgets match \"${query.trim()}\""
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 else -> {
                     // A lazy list that scrolls within the sheet's own bounds,
                     // rather than forcing the sheet itself to full height.
-                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            // widget_list_horizontal_margin
+                            .padding(horizontal = 11.dp),
+                    ) {
                         loaded.forEach { group ->
+                            val expanded = group.packageName in expandedPackages ||
+                                query.isNotBlank()
                             item(key = "header:${group.packageName}") {
-                                WidgetPickerGroupHeader(group)
-                            }
-                            items(
-                                group.items,
-                                key = { it.provider.provider.flattenToString() },
-                            ) { pickerItem ->
-                                WidgetPickerRow(
-                                    item = pickerItem,
-                                    onClick = { onPick(pickerItem.provider) },
+                                WidgetPickerGroupHeader(
+                                    group = group,
+                                    expanded = expanded,
+                                    onToggle = {
+                                        expandedPackages = if (expanded) {
+                                            expandedPackages - group.packageName
+                                        } else {
+                                            expandedPackages + group.packageName
+                                        }
+                                    },
                                 )
+                            }
+                            if (expanded) {
+                                // Launcher3 lays widgets out in a table of at
+                                // most MAX_ITEMS_IN_ROW (3) equal-weight cells.
+                                val rows = group.items.chunked(WIDGETS_PER_ROW)
+                                items(
+                                    rows,
+                                    key = { row -> "row:" + row.first().provider.provider.flattenToString() },
+                                ) { row ->
+                                    WidgetCellRow(row = row, onPick = onPick)
+                                }
                             }
                         }
                     }
@@ -874,66 +1107,126 @@ private fun WidgetPickerSheet(
 }
 
 @Composable
-private fun WidgetPickerGroupHeader(group: WidgetPickerGroup) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun WidgetPickerGroupHeader(
+    group: WidgetPickerGroup,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Surface(
+        onClick = onToggle,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
     ) {
-        if (group.appIcon != null) {
-            Image(
-                painter = BitmapPainter(group.appIcon),
-                contentDescription = group.appLabel,
-                modifier = Modifier.size(20.dp).clip(RoundedCornerShape(4.dp)),
+        Row(
+            // widget_list_header_view_vertical_padding
+            modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Spacer(Modifier.width(16.dp))
+            if (group.appIcon != null) {
+                Image(
+                    painter = BitmapPainter(group.appIcon),
+                    contentDescription = null,
+                    // launcher:appIconSize
+                    modifier = Modifier.size(48.dp),
+                )
+            } else {
+                Spacer(Modifier.size(48.dp))
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = group.appLabel,
+                    // WidgetListHeader.Title: 16sp, weight 500
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = if (group.items.size == 1) "1 widget" else "${group.items.size} widgets",
+                    // WidgetListHeader.SubTitle: 14sp, weight 400
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(16.dp))
+            Icon(
+                imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                // widgets_tray_expand_button is drawn at .6 alpha
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(16.dp))
         }
-        Text(
-            text = group.appLabel,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    }
+}
+
+/** Up to [WIDGETS_PER_ROW] equal-width cells, mirroring WidgetsListTableView. */
+@Composable
+private fun WidgetCellRow(row: List<WidgetPickerItem>, onPick: (AppWidgetProviderInfo) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        row.forEach { item ->
+            Box(Modifier.weight(1f)) {
+                WidgetPickerCell(item = item, onClick = { onPick(item.provider) })
+            }
+        }
+        // Keep a part-filled last row aligned with the full rows above it.
+        repeat(WIDGETS_PER_ROW - row.size) {
+            Spacer(Modifier.weight(1f))
+        }
     }
 }
 
 @Composable
-private fun WidgetPickerRow(item: WidgetPickerItem, onClick: () -> Unit) {
-    Row(
+private fun WidgetPickerCell(item: WidgetPickerItem, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxWidth()
+            // widget_cell_horizontal_padding / widget_cell_vertical_padding
+            .padding(horizontal = 4.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(4.dp),
     ) {
-        if (item.preview != null) {
-            Image(
-                painter = BitmapPainter(item.preview),
-                contentDescription = item.label,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .size(width = 96.dp, height = 64.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-            )
-        } else {
-            Surface(
-                modifier = Modifier.size(width = 96.dp, height = 64.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {}
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(88.dp)
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (item.preview != null) {
+                Image(
+                    painter = BitmapPainter(item.preview),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.label,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "${item.cellWidthDp} x ${item.cellHeightDp} dp",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(
+            text = item.label,
+            // widget_cell_title_font_size
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = "${item.cellWidthDp} x ${item.cellHeightDp} dp",
+            // widget_cell_dims_font_size
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
     }
 }
