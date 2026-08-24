@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -47,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,18 +64,21 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.core.view.WindowCompat
@@ -282,44 +287,103 @@ private fun HomeMenu(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    val items = listOf(
+        PopupShortcut("Wallpaper & style", R.drawable.ic_wallpaper) {
+            onDismiss()
+            openWallpaperPicker(context)
+        },
+        PopupShortcut("Widgets", R.drawable.ic_widgets) {
+            onDismiss()
+            onAddWidget()
+        },
+        PopupShortcut("Home settings", null) {
+            onDismiss()
+            onOpenSettings()
+        },
+    )
     Popup(
         offset = IntOffset(at.x.toInt(), at.y.toInt()),
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true),
     ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp,
-            shadowElevation = 8.dp,
+        Column(
+            // popup_margin: shortcut rows are separate pills with a 2dp gap.
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.padding(vertical = 4.dp),
         ) {
-            Column(Modifier.width(220.dp).padding(vertical = 8.dp)) {
-                HomeMenuItem("Wallpaper & style") {
-                    onDismiss()
-                    openWallpaperPicker(context)
-                }
-                HomeMenuItem("Widgets") {
-                    onDismiss()
-                    onAddWidget()
-                }
-                HomeMenuItem("Home settings") {
-                    onDismiss()
-                    onOpenSettings()
-                }
+            items.forEachIndexed { index, item ->
+                PopupShortcutRow(
+                    shortcut = item,
+                    shape = popupItemShape(index, items.size),
+                )
             }
         }
     }
 }
 
-@Composable
-private fun HomeMenuItem(label: String, onClick: () -> Unit) {
-    Surface(onClick = onClick, color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+/** One row of the long-press popup. [iconRes] null falls back to the settings glyph. */
+private data class PopupShortcut(
+    val label: String,
+    val iconRes: Int?,
+    val onClick: () -> Unit,
+)
+
+/**
+ * Launcher3 gives a lone shortcut a full pill (popup_single_item_radius, 100dp)
+ * and squares off the edges where rows meet (popup_smaller_radius, 4dp), so a
+ * stack reads as one grouped control.
+ */
+private fun popupItemShape(index: Int, count: Int): RoundedCornerShape {
+    val outer = 26.dp // half of bg_popup_item_height; 100dp clamps to this
+    val inner = 4.dp
+    return when {
+        count == 1 -> RoundedCornerShape(outer)
+        index == 0 -> RoundedCornerShape(
+            topStart = outer, topEnd = outer, bottomStart = inner, bottomEnd = inner,
         )
+        index == count - 1 -> RoundedCornerShape(
+            topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = outer,
+        )
+        else -> RoundedCornerShape(inner)
+    }
+}
+
+@Composable
+private fun PopupShortcutRow(shortcut: PopupShortcut, shape: RoundedCornerShape) {
+    Surface(
+        onClick = shortcut.onClick,
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        modifier = Modifier
+            // bg_popup_item_width / bg_popup_item_height
+            .width(216.dp)
+            .heightIn(min = 52.dp),
+    ) {
+        Box(contentAlignment = Alignment.CenterStart) {
+            Icon(
+                painter = if (shortcut.iconRes != null) {
+                    painterResource(shortcut.iconRes)
+                } else {
+                    rememberVectorPainter(Icons.Filled.Settings)
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    // system_shortcut_margin_start / system_shortcut_icon_size
+                    .padding(start = 16.dp)
+                    .size(20.dp),
+            )
+            Text(
+                text = shortcut.label,
+                // system_shortcut_content: 14sp, start padding 54dp, end 14dp
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 54.dp, end = 14.dp),
+            )
+        }
     }
 }
 
