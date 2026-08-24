@@ -7,6 +7,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -295,7 +296,10 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
 
     /** Narrows or widens a widget while a side resize handle is dragged. */
     fun resizeWidth(id: Int, deltaDp: Int) {
-        val next = (widthDp(id) + deltaDp).coerceAtLeast(MIN_WIDTH_DP)
+        if (!canResizeHorizontally(id)) return
+        val lower = slotMembers(id).maxOf { minResizeWidthDp(it) }
+        val upper = slotMembers(id).minOf { maxResizeWidthDp(it) }.coerceAtLeast(lower)
+        val next = (widthDp(id) + deltaDp).coerceIn(lower, upper)
         // Everything sharing a slot keeps one footprint -- that identical size
         // is what lets the flip between them look seamless.
         slotMembers(id).forEach { setWidthDp(it, next) }
@@ -322,6 +326,46 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
         info(id)?.let { (it.minHeight / density).toInt() }
             ?.coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP)
             ?: DEFAULT_HEIGHT_DP
+
+    /**
+     * Launcher3 only shows the handles for axes a widget actually supports
+     * (AppWidgetResizeFrame checks resizeMode before hiding them), so a widget
+     * that declares no vertical resizing shouldn't offer a vertical dot.
+     */
+    fun canResizeVertically(id: Int): Boolean =
+        info(id)?.let { it.resizeMode and AppWidgetProviderInfo.RESIZE_VERTICAL != 0 } ?: false
+
+    fun canResizeHorizontally(id: Int): Boolean =
+        info(id)?.let { it.resizeMode and AppWidgetProviderInfo.RESIZE_HORIZONTAL != 0 } ?: false
+
+    /** Smallest size the provider will accept, falling back to its natural size. */
+    private fun minResizeWidthDp(id: Int): Int {
+        val i = info(id) ?: return MIN_WIDTH_DP
+        val px = if (i.minResizeWidth > 0) i.minResizeWidth else i.minWidth
+        return (px / density).toInt().coerceAtLeast(MIN_WIDTH_DP)
+    }
+
+    private fun minResizeHeightDp(id: Int): Int {
+        val i = info(id) ?: return MIN_HEIGHT_DP
+        val px = if (i.minResizeHeight > 0) i.minResizeHeight else i.minHeight
+        return (px / density).toInt().coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP)
+    }
+
+    private fun maxResizeWidthDp(id: Int): Int {
+        val i = info(id) ?: return Int.MAX_VALUE
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || i.maxResizeWidth <= 0) {
+            return Int.MAX_VALUE
+        }
+        return (i.maxResizeWidth / density).toInt()
+    }
+
+    private fun maxResizeHeightDp(id: Int): Int {
+        val i = info(id) ?: return MAX_HEIGHT_DP
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || i.maxResizeHeight <= 0) {
+            return MAX_HEIGHT_DP
+        }
+        return (i.maxResizeHeight / density).toInt().coerceAtMost(MAX_HEIGHT_DP)
+    }
 
     /** Gives a freshly placed widget the size its provider asks for. */
     private fun applyNaturalSize(id: Int) {
@@ -375,7 +419,10 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
     /** Adjusts a widget's height by [deltaDp], clamped to the allowed range. Called
      *  continuously while the user drags a resize handle, so small deltas are fine. */
     fun resize(id: Int, deltaDp: Int) {
-        val next = (heightDp(id) + deltaDp).coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP)
+        if (!canResizeVertically(id)) return
+        val lower = slotMembers(id).maxOf { minResizeHeightDp(it) }
+        val upper = slotMembers(id).minOf { maxResizeHeightDp(it) }.coerceAtLeast(lower)
+        val next = (heightDp(id) + deltaDp).coerceIn(lower, upper)
         slotMembers(id).forEach { setHeightDp(it, next) }
     }
 
@@ -970,6 +1017,8 @@ private fun HostedWidget(
         if (isResizing) {
             ResizeFrameOverlay(
                 heightDp = heightDp,
+                verticalResizeActive = state.canResizeVertically(id),
+                horizontalResizeActive = state.canResizeHorizontally(id),
                 onTapInside = onExitResize,
                 onDragTopPx = { deltaPx ->
                     topRemainder += with(density) { deltaPx.toDp().value }
@@ -1033,6 +1082,8 @@ private fun WidgetErrorPlaceholder(label: String, onRemove: () -> Unit) {
 @Composable
 private fun ResizeFrameOverlay(
     heightDp: Int,
+    verticalResizeActive: Boolean,
+    horizontalResizeActive: Boolean,
     onDragTopPx: (Float) -> Unit,
     onDragBottomPx: (Float) -> Unit,
     onDragLeftPx: (Float) -> Unit,
@@ -1053,26 +1104,39 @@ private fun ResizeFrameOverlay(
                     detectTapGestures(onLongPress = {}, onTap = { onTapInside() })
                 },
         )
-        DotHandle(
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = -(RESIZE_DOT_TOUCH_TARGET / 2)),
-            vertical = true,
-            onDrag = onDragTopPx,
-        )
-        DotHandle(
-            modifier = Modifier.align(Alignment.BottomCenter).offset(y = (RESIZE_DOT_TOUCH_TARGET / 2)),
-            vertical = true,
-            onDrag = onDragBottomPx,
-        )
-        DotHandle(
-            modifier = Modifier.align(Alignment.CenterStart).offset(x = -(RESIZE_DOT_TOUCH_TARGET / 2)),
-            vertical = false,
-            onDrag = onDragLeftPx,
-        )
-        DotHandle(
-            modifier = Modifier.align(Alignment.CenterEnd).offset(x = (RESIZE_DOT_TOUCH_TARGET / 2)),
-            vertical = false,
-            onDrag = onDragRightPx,
-        )
+        // The touch targets stay wholly inside the frame -- Compose bounds hit
+        // testing to the parent, so a handle centred on the edge would only be
+        // grabbable on its inner half. Launcher3 avoids this by making its frame
+        // container larger than the widget (resize_frame_margin); here the frame
+        // matches the widget, so the dot is drawn against the edge instead.
+        if (verticalResizeActive) {
+            DotHandle(
+                modifier = Modifier.align(Alignment.TopCenter),
+                vertical = true,
+                dotAlignment = Alignment.TopCenter,
+                onDrag = onDragTopPx,
+            )
+            DotHandle(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                vertical = true,
+                dotAlignment = Alignment.BottomCenter,
+                onDrag = onDragBottomPx,
+            )
+        }
+        if (horizontalResizeActive) {
+            DotHandle(
+                modifier = Modifier.align(Alignment.CenterStart),
+                vertical = false,
+                dotAlignment = Alignment.CenterStart,
+                onDrag = onDragLeftPx,
+            )
+            DotHandle(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                vertical = false,
+                dotAlignment = Alignment.CenterEnd,
+                onDrag = onDragRightPx,
+            )
+        }
     }
 }
 
@@ -1081,10 +1145,11 @@ private fun ResizeFrameOverlay(
 private fun DotHandle(
     modifier: Modifier = Modifier,
     vertical: Boolean,
+    dotAlignment: Alignment = Alignment.Center,
     onDrag: (Float) -> Unit,
 ) {
     Box(
-        contentAlignment = Alignment.Center,
+        contentAlignment = dotAlignment,
         modifier = modifier
             .size(RESIZE_DOT_TOUCH_TARGET)
             .pointerInput(vertical) {
