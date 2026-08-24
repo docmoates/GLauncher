@@ -25,7 +25,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -137,7 +139,9 @@ private fun LauncherRoot(widgetHost: AppWidgetHost) {
 
     // White bar icons over the wallpaper; in the app drawer follow the theme so
     // they stay readable against its opaque surface.
-    SystemBarIcons(lightIcons = !swipe.isOpen || isSystemInDarkTheme())
+    // The status bar strip always sits over wallpaper/scrim now, never over
+    // the drawer sheet, so light icons are always the readable choice.
+    SystemBarIcons(lightIcons = true)
 
     BackHandler(enabled = swipe.isOpen) { scope.launch { swipe.close() } }
 
@@ -380,12 +384,15 @@ private fun AppDrawer(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
         modifier = modifier
             .fillMaxSize()
+            // Launcher3 stops all-apps at mInsets.top rather than y=0, which
+            // is what keeps the sheet's top edge visible over the wallpaper.
+            .statusBarsPadding()
             .nestedScroll(nestedScrollConnection),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .safeDrawingPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp)
                 // Contents fade in late in the gesture, the way Launcher3
                 // clamps the all-apps content fade.
