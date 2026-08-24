@@ -74,12 +74,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -146,6 +151,12 @@ class LongPressWidgetHostView(context: Context) : AppWidgetHostView(context) {
      */
     var onStackSwipe: ((Float) -> Unit)? = null
 
+    /** Reports the finger's screen position while dragging a lifted widget. */
+    var onDragMove: ((Float, Float) -> Unit)? = null
+
+    /** The drag finished; the listener decides where the widget landed. */
+    var onDragEnd: (() -> Unit)? = null
+
     private var longPressFired = false
     private var swiping = false
     private var downX = 0f
@@ -155,7 +166,16 @@ class LongPressWidgetHostView(context: Context) : AppWidgetHostView(context) {
         onLongPressListener?.invoke()
     }
 
-    override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+    /**
+     * All gesture handling happens here rather than in
+     * onInterceptTouchEvent/onTouchEvent. Intercepting only becomes possible
+     * once an event arrives after the long-press timer fires, and with a still
+     * finger the next event is ACTION_UP -- which Android converts into a
+     * cancel for the child and never routes to the parent's onTouchEvent, so
+     * the release was being lost entirely. dispatchTouchEvent sees every event
+     * unconditionally.
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         val slop = ViewConfiguration.get(context).scaledTouchSlop
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -163,56 +183,61 @@ class LongPressWidgetHostView(context: Context) : AppWidgetHostView(context) {
                 swiping = false
                 downX = ev.x
                 downY = ev.y
-                // On a stacked widget the vertical drag belongs to the flip, so
-                // stop ancestors claiming it first -- otherwise the home
-                // screen's swipe-up-to-all-apps wins the gesture. Compose
-                // honours this through AndroidComposeView.
-                if (onStackSwipe != null) {
-                    parent?.requestDisallowInterceptTouchEvent(true)
-                }
+                // Widgets own their vertical gestures (flip a stack, drag to
+                // move), so ancestors must not claim them first -- otherwise
+                // the home screen's swipe-up-to-all-apps wins.
+                parent?.requestDisallowInterceptTouchEvent(true)
                 postDelayed(fireLongPress, ViewConfiguration.getLongPressTimeout().toLong())
             }
+
             MotionEvent.ACTION_MOVE -> {
                 val dx = abs(ev.x - downX)
                 val dy = abs(ev.y - downY)
-                if (dx > slop || dy > slop) {
+                if (!longPressFired && (dx > slop || dy > slop)) {
                     removeCallbacks(fireLongPress)
                 }
-                // Only claim the gesture for a stack flip once it is clearly a
-                // deliberate vertical drag, so a widget's own content still
-                // gets ordinary taps and horizontal gestures.
+                if (longPressFired) {
+                    onDragMove?.invoke(ev.rawX, ev.rawY)
+                    return true
+                }
+                // Only claim a stack flip once it is clearly a deliberate
+                // vertical drag, so the widget's own content keeps ordinary
+                // taps and horizontal gestures.
                 if (onStackSwipe != null && dy > slop * 2 && dy > dx) {
                     swiping = true
                 }
+                if (swiping) return true
             }
+
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(fireLongPress)
-                if (onStackSwipe != null) {
-                    parent?.requestDisallowInterceptTouchEvent(false)
+                parent?.requestDisallowInterceptTouchEvent(false)
+                if (longPressFired) {
+                    longPressFired = false
+                    onDragEnd?.invoke()
+                    return true
+                }
+                if (swiping) {
+                    if (ev.actionMasked == MotionEvent.ACTION_UP) {
+                        onStackSwipe?.invoke(ev.y - downY)
+                    }
+                    swiping = false
+                    return true
                 }
             }
         }
-        return longPressFired || swiping
+        return super.dispatchTouchEvent(ev)
     }
 
-    override fun onTouchEvent(ev: MotionEvent): Boolean {
-        // Only reached once we've intercepted (or the widget ignored the
-        // event); swallow the remainder of a long-press gesture.
-        if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
-            removeCallbacks(fireLongPress)
-        }
-        if (swiping) {
-            if (ev.actionMasked == MotionEvent.ACTION_UP) {
-                onStackSwipe?.invoke(ev.y - downY)
-            }
-            if (ev.actionMasked == MotionEvent.ACTION_UP ||
-                ev.actionMasked == MotionEvent.ACTION_CANCEL
-            ) {
-                swiping = false
-            }
-            return true
-        }
-        return longPressFired || super.onTouchEvent(ev)
+    /**
+     * Widget content (scrollable lists, grids) asks its host to stop
+     * intercepting as soon as it starts scrolling. Honouring that would stop
+     * onInterceptTouchEvent being consulted at all, so long-press-to-drag and
+     * the stack flip would never see the rest of the gesture. Keep our own
+     * interception rights and just pass the request up the tree.
+     */
+    override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+        parent?.requestDisallowInterceptTouchEvent(disallowIntercept)
     }
 
     override fun onDetachedFromWindow() {
@@ -302,6 +327,29 @@ class WidgetState(context: Context, val host: AppWidgetHost) {
     /** Every widget sharing a home-screen slot with [id], including itself. */
     private fun slotMembers(id: Int): List<Int> =
         _slots.firstOrNull { id in it } ?: listOf(id)
+
+    /**
+     * Drops [id] onto [targetId]'s slot, the iOS-style "drag one widget on top
+     * of another to stack them" gesture. The moved widget leaves its old slot,
+     * and the combined slot resizes to its largest member.
+     */
+    fun stackOnto(id: Int, targetId: Int) {
+        if (id == targetId) return
+        val from = _slots.indexOfFirst { id in it }
+        val to = _slots.indexOfFirst { targetId in it }
+        if (from == -1 || to == -1 || from == to) return
+        _slots[from] = _slots[from] - id
+        _slots[to] = _slots[to] + id
+        if (_slots[from].isEmpty()) _slots.removeAt(from)
+        val members = _slots.first { targetId in it }
+        val sharedHeight = members.maxOf { heightDp(it) }
+        val sharedWidth = members.maxOf { widthDp(it) }
+        members.forEach {
+            setHeightDp(it, sharedHeight)
+            setWidthDp(it, sharedWidth)
+        }
+        persist()
+    }
 
     /** Index of the home-screen slot holding [id], or -1. */
     fun slotIndexOf(id: Int): Int = _slots.indexOfFirst { id in it }
@@ -526,18 +574,38 @@ fun rememberWidgetReconfigurer(state: WidgetState): (Int) -> Unit {
 @Composable
 fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
     var resizingId by remember { mutableStateOf(-1) }
-    // Reused for the "stack with another widget" action inside resize mode;
-    // whatever gets picked is appended to this slot instead of becoming its
-    // own standalone widget.
-    val stackAdder = rememberWidgetAdder(state) { anchorId, newId ->
-        if (anchorId == -1) state.add(newId) else state.addToStack(anchorId, newId)
-    }
-    val reconfigure = rememberWidgetReconfigurer(state)
+    // The lifted widget and where the finger currently is, in screen coords.
+    var draggingId by remember { mutableStateOf(-1) }
+    var dragStart by remember { mutableStateOf<Offset?>(null) }
+    var dragNow by remember { mutableStateOf(Offset.Zero) }
+    var moved by remember { mutableStateOf(false) }
+    // Where each slot sits on screen, so a drop can be matched to a target.
+    val slotBounds = remember { mutableStateMapOf<Int, Rect>() }
+    var removeBounds by remember { mutableStateOf(Rect.Zero) }
 
-    // If the widget being resized gets removed from under us, fall out of
-    // resize mode instead of pointing at a stale id.
     LaunchedEffect(state.ids.toList()) {
         if (resizingId != -1 && resizingId !in state.ids) resizingId = -1
+    }
+
+    fun finishDrag() {
+        val dragged = draggingId
+        val pointer = dragNow
+        draggingId = -1
+        dragStart = null
+        if (dragged == -1) return
+        if (!moved) {
+            // A lift with no movement just opens resize mode.
+            resizingId = dragged
+            return
+        }
+        when {
+            removeBounds.contains(pointer) -> state.remove(dragged)
+            else -> {
+                val target = slotBounds.entries
+                    .firstOrNull { (first, rect) -> rect.contains(pointer) && first != dragged }
+                if (target != null) state.stackOnto(dragged, target.key)
+            }
+        }
     }
 
     val resizeModeActive = resizingId != -1
@@ -548,9 +616,9 @@ fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
                 if (resizeModeActive) {
                     Modifier.pointerInput(resizingId) {
                         detectTapGestures(
-                            // Claim long presses too. Without this, the release
-                            // of the very long press that opened resize mode is
-                            // reported as a tap and closes it again instantly.
+                            // Claim long presses too, otherwise the release of
+                            // the press that opened resize mode reads as a tap
+                            // and closes it again immediately.
                             onLongPress = {},
                             onTap = { resizingId = -1 },
                         )
@@ -560,49 +628,125 @@ fun WidgetPanel(state: WidgetState, modifier: Modifier = Modifier) {
                 },
             ),
     ) {
+        if (draggingId != -1) {
+            RemoveDropTarget(
+                active = removeBounds.contains(dragNow),
+                modifier = Modifier.onGloballyPositioned { removeBounds = it.boundsInWindow() },
+            )
+        }
+
         state.slots.forEach { slot ->
             key(slot.first()) {
-                if (slot.size == 1) {
-                    val id = slot.first()
-                    HostedWidget(
-                        state = state,
-                        id = id,
-                        isResizing = resizingId == id,
-                        resizeModeActive = resizeModeActive,
-                        onLongPress = { resizingId = id },
-                        onExitResize = { resizingId = -1 },
-                        onAddToStack = { stackAdder(id) },
-                        onReconfigure = { reconfigure(id) },
-                        onMove = { delta -> moveWidgetSlot(state, id, delta) },
-                    )
-                } else {
-                    StackedWidget(
-                        state = state,
-                        ids = slot,
-                        resizingId = resizingId,
-                        resizeModeActive = resizeModeActive,
-                        onLongPress = { id -> resizingId = id },
-                        onExitResize = { resizingId = -1 },
-                        onAddToStack = { id -> stackAdder(id) },
-                        onReconfigure = { id -> reconfigure(id) },
-                        onMove = { id, delta -> moveWidgetSlot(state, id, delta) },
-                    )
+                val anchor = slot.first()
+                Box(
+                    modifier = Modifier.onGloballyPositioned {
+                        slotBounds[anchor] = it.boundsInWindow()
+                    },
+                ) {
+                    val dropTarget = draggingId != -1 &&
+                        draggingId !in slot &&
+                        slotBounds[anchor]?.contains(dragNow) == true
+
+                    val commonDrag: (Int) -> Pair<(Float, Float) -> Unit, () -> Unit> = { id ->
+                        Pair(
+                            { rawX: Float, rawY: Float ->
+                                val point = Offset(rawX, rawY)
+                                if (dragStart == null) dragStart = point
+                                dragNow = point
+                                val from = dragStart
+                                if (from != null && (point - from).getDistance() > 24f) moved = true
+                            },
+                            { finishDrag() },
+                        )
+                    }
+
+                    if (slot.size == 1) {
+                        val id = anchor
+                        val (onMove, onEnd) = commonDrag(id)
+                        HostedWidget(
+                            state = state,
+                            id = id,
+                            isResizing = resizingId == id,
+                            resizeModeActive = resizeModeActive,
+                            isDragging = draggingId == id,
+                            isDropTarget = dropTarget,
+                            dragOffset = if (draggingId == id) dragNow - (dragStart ?: dragNow)
+                                else Offset.Zero,
+                            onLongPress = {
+                                draggingId = id
+                                dragStart = null
+                                moved = false
+                            },
+                            onExitResize = { resizingId = -1 },
+                            onDragMove = onMove,
+                            onDragEnd = onEnd,
+                        )
+                    } else {
+                        StackedWidget(
+                            state = state,
+                            ids = slot,
+                            resizingId = resizingId,
+                            resizeModeActive = resizeModeActive,
+                            draggingId = draggingId,
+                            isDropTarget = dropTarget,
+                            dragOffset = dragNow - (dragStart ?: dragNow),
+                            onLongPress = { id ->
+                                draggingId = id
+                                dragStart = null
+                                moved = false
+                            },
+                            onExitResize = { resizingId = -1 },
+                            onDragMove = { rawX, rawY ->
+                                val point = Offset(rawX, rawY)
+                                if (dragStart == null) dragStart = point
+                                dragNow = point
+                                val from = dragStart
+                                if (from != null && (point - from).getDistance() > 24f) moved = true
+                            },
+                            onDragEnd = { finishDrag() },
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-/** Moves the slot containing [id] by [delta] positions, clamped to the panel. */
-private fun moveWidgetSlot(state: WidgetState, id: Int, delta: Int) {
-    val from = state.slotIndexOf(id)
-    if (from == -1) return
-    state.moveSlot(from, (from + delta).coerceIn(0, state.slots.lastIndex))
+/** Drop here to delete, the way Pixel shows a Remove target while dragging. */
+@Composable
+private fun RemoveDropTarget(active: Boolean, modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = if (active) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+        },
+        modifier = modifier
+            .padding(bottom = 12.dp)
+            .height(48.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = "Remove",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (active) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+            )
+        }
+    }
 }
 
 /**
  * A slot holding more than one widget: swiping up on the visible widget
- * cycles to the next one in the stack (wrapping around), Pixel/iOS-style.
+ * cycles to the next one in the stack, swiping down goes back.
  */
 @Composable
 private fun StackedWidget(
@@ -610,45 +754,22 @@ private fun StackedWidget(
     ids: List<Int>,
     resizingId: Int,
     resizeModeActive: Boolean,
+    draggingId: Int,
+    isDropTarget: Boolean,
+    dragOffset: Offset,
     onLongPress: (Int) -> Unit,
     onExitResize: () -> Unit,
-    onAddToStack: (Int) -> Unit,
-    onReconfigure: (Int) -> Unit,
-    onMove: (Int, Int) -> Unit,
+    onDragMove: (Float, Float) -> Unit,
+    onDragEnd: () -> Unit,
 ) {
     var currentIndex by remember(ids.first()) { mutableIntStateOf(0) }
     val safeIndex = currentIndex.coerceIn(0, ids.lastIndex)
-    var dragAccumulatorPx by remember(ids.first()) { mutableFloatStateOf(0f) }
     // Which way the last flip went, so the animation slides the way the
-    // finger did instead of always coming up from the bottom.
+    // finger did instead of always entering from the bottom.
     var flippingForward by remember(ids.first()) { mutableStateOf(true) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .draggable(
-                    orientation = Orientation.Vertical,
-                    // While a widget is being resized the frame owns the drag.
-                    enabled = !resizeModeActive,
-                    state = rememberDraggableState { delta -> dragAccumulatorPx += delta },
-                    onDragStopped = {
-                        when {
-                            // Swipe up: next widget in the stack.
-                            dragAccumulatorPx <= -SWAP_DRAG_THRESHOLD_PX -> {
-                                flippingForward = true
-                                currentIndex = (safeIndex + 1) % ids.size
-                            }
-                            // Swipe down: previous one, wrapping backwards.
-                            dragAccumulatorPx >= SWAP_DRAG_THRESHOLD_PX -> {
-                                flippingForward = false
-                                currentIndex = (safeIndex - 1 + ids.size) % ids.size
-                            }
-                        }
-                        dragAccumulatorPx = 0f
-                    },
-                ),
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             AnimatedContent(
                 targetState = safeIndex,
                 transitionSpec = {
@@ -668,11 +789,13 @@ private fun StackedWidget(
                     id = id,
                     isResizing = resizingId == id,
                     resizeModeActive = resizeModeActive,
+                    isDragging = draggingId == id,
+                    isDropTarget = isDropTarget,
+                    dragOffset = if (draggingId == id) dragOffset else Offset.Zero,
                     onLongPress = { onLongPress(id) },
                     onExitResize = onExitResize,
-                    onAddToStack = { onAddToStack(id) },
-                    onReconfigure = { onReconfigure(id) },
-                    onMove = { delta -> onMove(id, delta) },
+                    onDragMove = onDragMove,
+                    onDragEnd = onDragEnd,
                     onStackSwipe = { totalDy ->
                         when {
                             totalDy <= -SWAP_DRAG_THRESHOLD_PX -> {
@@ -698,7 +821,7 @@ private fun StackedWidget(
     }
 }
 
-/** Minimum upward drag (px) before a stack swipe counts as a swap. */
+/** Minimum vertical drag (px) before a stack swipe counts as a flip. */
 private const val SWAP_DRAG_THRESHOLD_PX = 120f
 
 @Composable
@@ -726,11 +849,13 @@ private fun HostedWidget(
     id: Int,
     isResizing: Boolean,
     resizeModeActive: Boolean,
+    isDragging: Boolean = false,
+    isDropTarget: Boolean = false,
+    dragOffset: Offset = Offset.Zero,
     onLongPress: () -> Unit,
     onExitResize: () -> Unit = {},
-    onAddToStack: () -> Unit = {},
-    onReconfigure: () -> Unit = {},
-    onMove: (Int) -> Unit = {},
+    onDragMove: (Float, Float) -> Unit = { _, _ -> },
+    onDragEnd: () -> Unit = {},
     onStackSwipe: ((Float) -> Unit)? = null,
 ) {
     val info = state.info(id) ?: return
@@ -751,18 +876,19 @@ private fun HostedWidget(
         }
     }
     val view = viewResult.getOrNull()
-    // RemoteViews consume every touch, so a Compose long-press detector on a
-    // parent never fires; the interception happens inside the host view.
-    (view as? LongPressWidgetHostView)?.onLongPressListener = onLongPress
-    (view as? LongPressWidgetHostView)?.onStackSwipe = onStackSwipe
+    // RemoteViews consume every touch, so Compose gesture detectors on a
+    // parent never fire; long press, drag and flip are all intercepted inside
+    // the host view instead.
+    (view as? LongPressWidgetHostView)?.let {
+        it.onLongPressListener = onLongPress
+        it.onStackSwipe = onStackSwipe
+        it.onDragMove = onDragMove
+        it.onDragEnd = onDragEnd
+    }
 
-    // Fractional drag remainders so slow, small drag deltas still accumulate
-    // into whole-dp resize steps instead of being truncated away every frame.
     var topRemainder by remember(id) { mutableStateOf(0f) }
     var bottomRemainder by remember(id) { mutableStateOf(0f) }
     val requestedWidthDp = state.widthDp(id)
-    // Side handles report px; converting against the panel width keeps the
-    // fraction-based width model independent of screen size.
     var panelWidthPx by remember(id) { mutableStateOf(1f) }
 
     Box(
@@ -778,22 +904,45 @@ private fun HostedWidget(
       Box(
         modifier = Modifier
             .fillMaxWidth(widthFraction)
-            .pointerInput(id) {
-                detectTapGestures(onLongPress = { onLongPress() })
-            },
+            .graphicsLayer {
+                // The lifted widget follows the finger and floats above the rest.
+                translationX = dragOffset.x
+                translationY = dragOffset.y
+                val lift = if (isDragging) 1.06f else 1f
+                scaleX = lift
+                scaleY = lift
+                alpha = if (isDragging) 0.92f else 1f
+            }
+            .then(
+                if (isDropTarget) {
+                    Modifier.border(
+                        3.dp,
+                        MaterialTheme.colorScheme.primary,
+                        RoundedCornerShape(20.dp),
+                    )
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         if (view != null) {
             AndroidView(
                 modifier = Modifier.fillMaxWidth().height(heightDp.dp),
                 factory = { view },
                 update = { v ->
-                    val widthDp = v.resources.configuration.screenWidthDp - 40
+                    val widthDp = with(density) { (panelWidthPx * widthFraction).toDp().value }
                     runCatching {
                         // Bundle.EMPTY is immutable; passing it here crashes with an
                         // ArrayMap.allocArrays UnsupportedOperationException deep
                         // inside the framework. Always use a fresh Bundle.
                         @Suppress("DEPRECATION")
-                        v.updateAppWidgetSize(Bundle(), widthDp, heightDp, widthDp, heightDp)
+                        v.updateAppWidgetSize(
+                            Bundle(),
+                            widthDp.toInt(),
+                            heightDp,
+                            widthDp.toInt(),
+                            heightDp,
+                        )
                     }
                 },
             )
@@ -802,8 +951,6 @@ private fun HostedWidget(
         }
 
         if (resizeModeActive && !isResizing) {
-            // Dim other widgets while one is in resize mode, matching Pixel's
-            // "jostle" behaviour; the panel-level tap catcher exits the mode.
             Surface(
                 modifier = Modifier.fillMaxWidth().height(heightDp.dp),
                 color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f),
@@ -813,11 +960,11 @@ private fun HostedWidget(
         if (isResizing) {
             ResizeFrameOverlay(
                 heightDp = heightDp,
+                onTapInside = onExitResize,
                 onDragTopPx = { deltaPx ->
                     topRemainder += with(density) { deltaPx.toDp().value }
                     val whole = topRemainder.toInt()
                     if (whole != 0) {
-                        // Dragging the top handle up should grow the widget.
                         state.resize(id, -whole)
                         topRemainder -= whole
                     }
@@ -830,11 +977,6 @@ private fun HostedWidget(
                         bottomRemainder -= whole
                     }
                 },
-                onRemove = { state.remove(id) },
-                onTapInside = onExitResize,
-                onStack = onAddToStack,
-                onReconfigure = onReconfigure.takeIf { info.configure != null },
-                onMove = onMove,
                 onDragLeftPx = { deltaPx ->
                     state.resizeWidth(id, -with(density) { deltaPx.toDp().value }.toInt())
                 },
@@ -874,155 +1016,85 @@ private fun WidgetErrorPlaceholder(label: String, onRemove: () -> Unit) {
 /* ------------------------------ Resize mode ------------------------------- */
 
 /**
- * The Pixel-style resize frame: a rounded outline the size of the widget with
- * a drag handle centred on the top and bottom edges, and a "Remove" chip
- * floating above it. [onDragTopPx] / [onDragBottomPx] receive raw per-frame
- * vertical drag deltas in px, positive meaning the finger moved down.
+ * The resize frame: a rounded outline around the widget with a round dot
+ * handle centred on each edge, dragged to resize. Nothing else -- moving,
+ * stacking and removing are all done by dragging the widget itself.
  */
 @Composable
 private fun ResizeFrameOverlay(
     heightDp: Int,
     onDragTopPx: (Float) -> Unit,
     onDragBottomPx: (Float) -> Unit,
-    onRemove: () -> Unit,
+    onDragLeftPx: (Float) -> Unit,
+    onDragRightPx: (Float) -> Unit,
     onTapInside: () -> Unit = {},
-    onStack: () -> Unit = {},
-    onReconfigure: (() -> Unit)? = null,
-    onMove: (Int) -> Unit = {},
-    onDragLeftPx: (Float) -> Unit = {},
-    onDragRightPx: (Float) -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth().height(heightDp.dp)) {
-        // While in resize mode the whole widget surface is a drag target
-        // (Pixel behaviour): drag down grows, drag up shrinks. A plain tap
-        // exits resize mode.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(heightDp.dp)
-                .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
+                .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(20.dp))
                 .pointerInput(Unit) {
-                    detectTapGestures(onTap = { onTapInside() })
-                }
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures(
-                        onVerticalDrag = { change, dragAmount ->
-                            change.consume()
-                            onDragBottomPx(dragAmount)
-                        },
-                    )
+                    detectTapGestures(onLongPress = {}, onTap = { onTapInside() })
                 },
         )
-        Row(
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = (-40).dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (onReconfigure != null) {
-                ResizeChip("Configure", onReconfigure)
-            }
-            ResizeChip("Stack", onStack)
-            ResizeChip("Remove", onRemove, destructive = true)
-        }
-        Row(
-            modifier = Modifier.align(Alignment.BottomCenter).offset(y = 40.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ResizeChip("Move up", onClick = { onMove(-1) })
-            ResizeChip("Move down", onClick = { onMove(1) })
-        }
-        ResizeHandle(
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = (-6).dp),
+        DotHandle(
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = (-12).dp),
+            vertical = true,
             onDrag = onDragTopPx,
         )
-        ResizeHandle(
-            modifier = Modifier.align(Alignment.BottomCenter).offset(y = 6.dp),
+        DotHandle(
+            modifier = Modifier.align(Alignment.BottomCenter).offset(y = 12.dp),
+            vertical = true,
             onDrag = onDragBottomPx,
         )
-        // Side handles narrow/widen the widget, the horizontal counterpart of
-        // Launcher3's spanX resizing.
-        SideResizeHandle(
-            modifier = Modifier.align(Alignment.CenterStart).offset(x = (-6).dp),
+        DotHandle(
+            modifier = Modifier.align(Alignment.CenterStart).offset(x = (-12).dp),
+            vertical = false,
             onDrag = onDragLeftPx,
         )
-        SideResizeHandle(
-            modifier = Modifier.align(Alignment.CenterEnd).offset(x = 6.dp),
+        DotHandle(
+            modifier = Modifier.align(Alignment.CenterEnd).offset(x = 12.dp),
+            vertical = false,
             onDrag = onDragRightPx,
         )
     }
 }
 
+/** A round resize dot with a generous invisible touch target around it. */
 @Composable
-private fun ResizeChip(label: String, onClick: () -> Unit, destructive: Boolean = false) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(50),
-        color = if (destructive) {
-            MaterialTheme.colorScheme.errorContainer
-        } else {
-            MaterialTheme.colorScheme.secondaryContainer
-        },
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (destructive) {
-                MaterialTheme.colorScheme.onErrorContainer
-            } else {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            },
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-        )
-    }
-}
-
-/** Left/right counterpart of [ResizeHandle]; reports horizontal drag deltas. */
-@Composable
-private fun SideResizeHandle(modifier: Modifier = Modifier, onDrag: (Float) -> Unit) {
+private fun DotHandle(
+    modifier: Modifier = Modifier,
+    vertical: Boolean,
+    onDrag: (Float) -> Unit,
+) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(width = 48.dp, height = 120.dp)
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        onDrag(dragAmount)
-                    },
-                )
+            .size(48.dp)
+            .pointerInput(vertical) {
+                if (vertical) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { change, dragAmount ->
+                            change.consume()
+                            onDrag(dragAmount)
+                        },
+                    )
+                } else {
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            onDrag(dragAmount)
+                        },
+                    )
+                }
             },
     ) {
         Box(
             modifier = Modifier
-                .size(width = 12.dp, height = 32.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.primary),
-        )
-    }
-}
-
-/**
- * A pill-shaped drag handle with a generous invisible touch target around it;
- * reports raw vertical drag deltas in px.
- */
-@Composable
-private fun ResizeHandle(modifier: Modifier = Modifier, onDrag: (Float) -> Unit) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(width = 120.dp, height = 48.dp)
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onVerticalDrag = { change, dragAmount ->
-                        change.consume()
-                        onDrag(dragAmount)
-                    },
-                )
-            },
-    ) {
-        Box(
-            modifier = Modifier
-                .size(width = 32.dp, height = 12.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .size(20.dp)
+                .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary),
         )
     }
