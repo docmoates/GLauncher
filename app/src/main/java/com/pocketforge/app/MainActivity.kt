@@ -135,15 +135,18 @@ private fun LauncherRoot(widgetHost: AppWidgetHost) {
     val widgets = rememberWidgetState(widgetHost)
     val homeGrid = rememberHomeGridState()
     val swipe = rememberAllAppsSwipeState()
+    val settings = rememberLauncherSettings()
+    var settingsOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // White bar icons over the wallpaper; in the app drawer follow the theme so
     // they stay readable against its opaque surface.
-    // The status bar strip always sits over wallpaper/scrim now, never over
-    // the drawer sheet, so light icons are always the readable choice.
-    SystemBarIcons(lightIcons = true)
+    // Over the wallpaper (home or drawer strip) white icons read best; the
+    // settings page is an opaque themed surface, so follow the theme there.
+    SystemBarIcons(lightIcons = !settingsOpen || isSystemInDarkTheme())
 
-    BackHandler(enabled = swipe.isOpen) { scope.launch { swipe.close() } }
+    BackHandler(enabled = settingsOpen) { settingsOpen = false }
+    BackHandler(enabled = swipe.isOpen && !settingsOpen) { scope.launch { swipe.close() } }
 
     Box(
         Modifier
@@ -158,7 +161,9 @@ private fun LauncherRoot(widgetHost: AppWidgetHost) {
                 widgets = widgets,
                 homeGrid = homeGrid,
                 swipe = swipe,
+                settings = settings,
                 onOpenDrawer = { scope.launch { swipe.open() } },
+                onOpenSettings = { settingsOpen = true },
             )
         }
 
@@ -177,6 +182,10 @@ private fun LauncherRoot(widgetHost: AppWidgetHost) {
                     translationY = swipe.progress.value * swipe.shiftRangePx
                 },
             )
+        }
+
+        if (settingsOpen) {
+            SettingsScreen(settings = settings, onClose = { settingsOpen = false })
         }
     }
 }
@@ -206,7 +215,9 @@ private fun HomeScreen(
     widgets: WidgetState,
     homeGrid: HomeGridState,
     swipe: AllAppsSwipeState,
+    settings: LauncherSettingsState,
     onOpenDrawer: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var menuAt by remember { mutableStateOf<Offset?>(null) }
@@ -244,7 +255,7 @@ private fun HomeScreen(
 
             SearchPill(onClick = onOpenDrawer)
             Spacer(Modifier.height(20.dp))
-            Dock(apps = pickDockApps(apps, dockCount))
+            Dock(apps = pickDockApps(apps, dockCount), settings = settings)
             Spacer(Modifier.height(12.dp))
         }
 
@@ -252,6 +263,7 @@ private fun HomeScreen(
             HomeMenu(
                 at = at,
                 onAddWidget = addWidget,
+                onOpenSettings = onOpenSettings,
                 onDismiss = { menuAt = null },
             )
         }
@@ -263,7 +275,12 @@ private fun HomeScreen(
  * the home screen actions.
  */
 @Composable
-private fun HomeMenu(at: Offset, onAddWidget: () -> Unit, onDismiss: () -> Unit) {
+private fun HomeMenu(
+    at: Offset,
+    onAddWidget: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     Popup(
         offset = IntOffset(at.x.toInt(), at.y.toInt()),
@@ -284,6 +301,10 @@ private fun HomeMenu(at: Offset, onAddWidget: () -> Unit, onDismiss: () -> Unit)
                 HomeMenuItem("Widgets") {
                     onDismiss()
                     onAddWidget()
+                }
+                HomeMenuItem("Home settings") {
+                    onDismiss()
+                    onOpenSettings()
                 }
             }
         }
@@ -332,11 +353,11 @@ private fun SearchPill(onClick: () -> Unit) {
 }
 
 @Composable
-private fun Dock(apps: List<AppInfo>) {
+private fun Dock(apps: List<AppInfo>, settings: LauncherSettingsState) {
     if (apps.isEmpty()) return
     Surface(
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+        shape = RoundedCornerShape(settings.dockCornerRadiusDp.dp),
+        color = settings.resolvedDockColor(),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
