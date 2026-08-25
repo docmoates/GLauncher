@@ -23,14 +23,14 @@ val versionDisplayName = version + if (!isReleaseBuild) " $devReleaseName" else 
 
 android {
     compileSdk = 37
-    namespace = "app.lawnchair.lawnicons"
+    namespace = "app.lawnchair"
 
     defaultConfig {
-        applicationId = "app.lawnchair.lawnicons"
-        minSdk = 26
+        applicationId = "app.lawnchair"
+        minSdk = 24
         targetSdk = compileSdk
-        versionCode = 26
-        versionName = versionDisplayName
+        versionCode = 1
+        versionName = "16-dev"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -60,22 +60,14 @@ android {
             isMinifyEnabled = true
             proguardFiles("proguard-rules.pro")
         }
-        create("play") {
-            applicationIdSuffix = ".play"
-            isMinifyEnabled = true
-            proguardFiles("proguard-rules.pro")
-        }
     }
 
     flavorDimensions += "product"
     productFlavors {
         create("app") {
             dimension = "product"
-            resValue("string", "apps_name", "Lawnicons")
+            resValue("string", "apps_name", "Lawnchair")
         }
-    }
-    sourceSets.getByName("app") {
-        res.directories.add("src/runtime/res")
     }
 
     buildFeatures {
@@ -164,8 +156,4 @@ dependencies {
     testImplementation(libs.mockito)
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.kotlinx.coroutines.test)
-}
-
-tasks.preBuild {
-    dependsOn(project(projects.svgProcessor.path).tasks.named("run"))
 }

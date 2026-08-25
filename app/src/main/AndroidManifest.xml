@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="app.lawnchair.lawnfeed">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Let's break some rules... -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
@@ -26,13 +25,6 @@
             android:name=".LauncherClientProxyService"
             android:enabled="true"
             android:exported="true" />
-
-        <service android:name="amirz.aidlbridge.BridgeService">
-            <intent-filter>
-                <action android:name="com.android.launcher3.WINDOW_OVERLAY" />
-                <data android:scheme="app" />
-            </intent-filter>
-        </service>
 
         <!-- Required for Lawnfeed updater -->
         <receiver
