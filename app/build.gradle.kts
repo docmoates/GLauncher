@@ -6,7 +6,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.licensee)
-    alias(libs.plugins.metro)
 }
 
 val buildCommit = providers.exec {
@@ -150,8 +149,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     implementation(libs.kotlinx.serialization.json)
-
-    implementation(libs.metrox.viewmodel.compose)
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.kotlinx.serialization)
