@@ -1,41 +1,15 @@
-<!-- 
-  Thanks for your contribution! A clear description and a test plan are the best way to get your PR reviewed and merged quickly.
-  For simple `Style` or `Chore` changes, a detailed description is optional.
+<!-- ICON ADDITIONS
+- The bot will automatically describe icon changes below your description (if any).
+- You can add extra notes or attach original icons that are hard to find.
+- Please make sure the title is correct — it's parsed for the Nightly changelog stats.
+- Title example: "+1 icon, +2 links, +3 updates".
+  +1 icon = +1 brand new icon (related links aren't considered).
+  +2 links = +2 missing app IDs for existing icons.
+  +3 updates = redesign of 3 existing icons.
+  In other cases, choose something else to avoid confusion.
 -->
 
-### Description
-
-<!-- A clear and concise one-paragraph summary of what this PR does. -->
-
-Fixes #(issue) <!-- optional -->
-
-### Reasoning
-
-<!-- 
-  (Optional - for major changes)
-  A more detailed explanation of the "why." 
-  - Why was this change necessary? (e.g., technical debt, user feedback, architectural improvement)
-  - What are the core principles of the new solution?
+<!-- GENERAL CHANGES / BUGS
+- Leave a short summary.
+- If there's an issue, link it (Fix #123 or Close #123).
 -->
-
-
-### Testing
-
-<!-- 
-  (Optional - but highly encouraged for any functional change)
-  A step-by-step script for how to test these changes.
--->
-
-
-### Type of change
-
-<!-- Please replace the :x: with a :white_check_mark: for the ONE line that best describes your change. -->
-
-:x: **Bug fix** (A non-breaking change that fixes an issue)
-:x: **New feature** (A non-breaking change that adds functionality)
-:x: **Breaking change** (A fix or feature that would cause existing functionality to not work as expected)
-:x: **Refactor** (A code change that neither fixes a bug nor adds a feature)
-:x: **Performance** (A code change that improves performance)
-:x: **Style** (Code style changes)
-:x: **Docs** (Changes to documentation)
-:x: **Chore** (Changes to the build process or other tooling)

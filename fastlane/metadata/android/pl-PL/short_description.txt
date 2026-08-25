@@ -1,1 +1,1 @@
-Homescreen based on Launcher3 from AOSP
+Monochromatyczne ikony z obrysem dla launcherów Android.

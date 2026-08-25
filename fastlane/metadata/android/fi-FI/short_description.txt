@@ -1,1 +1,1 @@
-Aloitusnäyttö perustuu Launcher3:seen AOSP:sta
+Monochrome outlined brand icons for Android launchers.

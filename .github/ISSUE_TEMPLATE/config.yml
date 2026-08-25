@@ -1,11 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: GitHub Discussions
-    url: https://github.com/LawnchairLauncher/lawnchair/discussions
-    about: Discuss anything related to Lawnchair, or ask and answer questions here.
-  - name: Telegram support group
-    url: https://t.me/lccommunity
-    about: We recommend to go to this place if you wish to ask a question and want a quicker reply.
-  - name: Discord server
-    url: https://discord.com/invite/3x8qNWxgGZ
-    about: You can also ask questions here if you use Discord instead of Telegram.
+  - name: Link apps and icons
+    url: https://github.com/LawnchairLauncher/lawnicons/blob/develop/CONTRIBUTING.md#adding-icons-and-missing-app-ids-to-lawnicons
+    about: Learn more about linking an app to an existing icon via a pull request.
+  - name: Requesting icons
+    url: https://github.com/LawnchairLauncher/lawnicons#icon-requests
+    about: We accept icon requests only by email.

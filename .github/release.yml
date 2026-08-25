@@ -1,20 +1,17 @@
 changelog:
-  exclude:
-    labels:
-      - bot
-    authors:
-      - renovate[bot]
-      - lawnchair-bot
-      - crowdin-bot
   categories:
-    - title: 🪄 Features & 🐛 Bugfixes
+    - title: 📱 New Icons & Links
       labels:
-        - '*'
+        - icons
+    - title: 🧹 Code
+      labels:
+        - code
       exclude:
         labels:
           - dependencies
-          - github_actions
-          - housekeeping
-    - title: 🧹 Housekeeping
+    - title: 🧑‍💻 Dependencies
       labels:
-        - housekeeping
+        - dependencies
+    - title: 💬 Localization
+      labels:
+        - locale

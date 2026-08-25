@@ -1,1 +1,1 @@
-Homescreen based on Launcher3 from AOSP
+為 Android 啟動器製作的單色線條風格圖示。

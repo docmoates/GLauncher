@@ -15,5 +15,11 @@
             ],
             automerge: true,
         },
+        {
+            groupName: 'AGP',
+            matchPackageNames: [
+                '/com.android.*/',
+            ],
+        },
     ],
 }

@@ -1,1 +1,1 @@
-Homescreen based on Launcher3 from AOSP
+Mga monocromatikong brand icon na may balangkas para sa mga Android launcher.

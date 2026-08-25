@@ -1,121 +1,83 @@
-# Lawnchair 16
+<p align="center">
+<img src="docs/images/repo-cover.png" alt="Lawnicons repository cover" width="340" />
+</p>
 
-[![Build debug APK](https://github.com/LawnchairLauncher/lawnchair/actions/workflows/ci.yml/badge.svg)](https://github.com/LawnchairLauncher/lawnchair/actions/workflows/ci.yml)
-[![Build release APK](https://github.com/LawnchairLauncher/lawnchair/actions/workflows/release_update.yml/badge.svg)](https://github.com/LawnchairLauncher/lawnchair/actions/workflows/release_update.yml)
-[![Crowdin](https://badges.crowdin.net/e/188ba69d884418987f0b7f1dd55e3a4e/localized.svg)](https://lawnchair.crowdin.com/lawnchair)
-[![OpenCollective](https://img.shields.io/opencollective/all/lawnchair?label=financial%20contributors&logo=open-collective)](https://opencollective.com/lawnchair)
-[![Telegram](https://img.shields.io/endpoint?url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Flccommunity)](https://t.me/lccommunity)
-[![Discord](https://img.shields.io/discord/803299970169700402?label=server&logo=discord)](https://discord.gg/3x8qNWxgGZ)
-[![GitHub Downloads](https://img.shields.io/github/downloads/LawnchairLauncher/lawnchair/total.svg?label=GitHub%20Downloads&logo=github)](https://github.com/LawnchairLauncher/lawnchair/releases)
-[![Play Store Installs](https://img.shields.io/endpoint?color=green&logo=googleplay&logoColor=green&url=https%3A%2F%2Fplay.cuzi.workers.dev%2Fplay%3Fi%3Dapp.lawnchair.play%26l%3DPlay%2520Store%2520Installs%26m%3D%24shortinstalls)](https://play.google.com/store/apps/details?id=app.lawnchair.play)
+<h1 align="center" style="margin-top: 0px;">Lawnicons</h1>
 
-> [!WARNING]
-> This branch contains major changes from the rebase of Launcher3, including changes that can cause
-> Lawnchair to crash or break.
->
-> For regular users, we recommend staying on *Lawnchair 15 Beta 3*.
+<div align="center">    
+  <a href="https://github.com/LawnchairLauncher/lawnicons/blob/develop/LICENSE">
+    <img alt="GitHub License" src="https://img.shields.io/github/license/LawnchairLauncher/Lawnicons?logo=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0nMS4wJyBlbmNvZGluZz0ndXRmLTgnPz48c3ZnIHdpZHRoPSc4MDBweCcgaGVpZ2h0PSc4MDBweCcgdmlld0JveD0nMCAwIDI0IDI0JyBmaWxsPSdub25lJyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnPjxwYXRoIGQ9J00xOSAzSDlWM0M3LjExNDM4IDMgNi4xNzE1NyAzIDUuNTg1NzkgMy41ODU3OUM1IDQuMTcxNTcgNSA1LjExNDM4IDUgN1YxMC41VjE3JyBzdHJva2U9JyNGRkZGRkYnIHN0cm9rZS13aWR0aD0nMicgc3Ryb2tlLWxpbmVjYXA9J3JvdW5kJyBzdHJva2UtbGluZWpvaW49J3JvdW5kJy8+PHBhdGggZD0nTTE0IDE3VjE5QzE0IDIwLjEwNDYgMTQuODk1NCAyMSAxNiAyMVYyMUMxNy4xMDQ2IDIxIDE4IDIwLjEwNDYgMTggMTlWOVY0LjVDMTggMy42NzE1NyAxOC42NzE2IDMgMTkuNSAzVjNDMjAuMzI4NCAzIDIxIDMuNjcxNTcgMjEgNC41VjQuNUMyMSA1LjMyODQzIDIwLjMyODQgNiAxOS41IDZIMTguNScgc3Ryb2tlPScjRkZGRkZGJyBzdHJva2Utd2lkdGg9JzInIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcgc3Ryb2tlLWxpbmVqb2luPSdyb3VuZCcvPjxwYXRoIGQ9J00xNiAyMUg1QzMuODk1NDMgMjEgMyAyMC4xMDQ2IDMgMTlWMTlDMyAxNy44OTU0IDMuODk1NDMgMTcgNSAxN0gxNCcgc3Ryb2tlPScjRkZGRkZGJyBzdHJva2Utd2lkdGg9JzInIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcgc3Ryb2tlLWxpbmVqb2luPSdyb3VuZCcvPjxwYXRoIGQ9J005IDdIMTQnIHN0cm9rZT0nI0ZGRkZGRicgc3Ryb2tlLXdpZHRoPScyJyBzdHJva2UtbGluZWNhcD0ncm91bmQnIHN0cm9rZS1saW5lam9pbj0ncm91bmQnLz48cGF0aCBkPSdNOSAxMUgxNCcgc3Ryb2tlPScjRkZGRkZGJyBzdHJva2Utd2lkdGg9JzInIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcgc3Ryb2tlLWxpbmVqb2luPSdyb3VuZCcvPjwvc3ZnPg==&color=43444B"></a>
+  <a href="https://github.com/LawnchairLauncher/lawnicons/actions/workflows/build_debug_apk.yml">
+    <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/LawnchairLauncher/lawnicons/build_debug_apk.yml?branch=develop&label=Debug%20APK&logo=github&color=3F9E00"></a>
+  <a href="https://github.com/LawnchairLauncher/lawnicons/actions/workflows/build_release_apk.yml">
+    <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/LawnchairLauncher/lawnicons/build_release_apk.yml?label=Release%20APK&logo=github&color=3F9E00"></a>
+  <a href="https://discord.gg/3x8qNWxgGZ">
+    <img alt="Discord" src="https://img.shields.io/discord/803299970169700402?logo=discord&logoColor=white&label=Discord&color=5165f6"></a>    
+</div>
 
-<picture>
-    <!-- Avoid image being clickable with slight workaround -->
-    <!-- ❤️ Credit to simonppt for the current mockup on Unsplash 
-            https://unsplash.com/photos/a-white-flower-with-green-leaves-on-a-white-background-ojBNiaeykwc
-    -->
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/device-frame.webp" width="250px">
-    <img alt="A device running Lawnchair Launcher with green flower wallpaper" src="docs/assets/device-frame.webp" width="250px">
-</picture>
+<br/>
 
-Lawnchair is a free, open-source home app for Android. Taking Launcher3—Android’s default home app—as a starting point, it ports Pixel Launcher features and introduces rich customization options.
+Lawnicons is an icon pack developed by the Lawnchair team and supported by our community. Originally an addon for Lawnchair 12 Alpha 5 and above to implement themed icons, it can now be used on many launchers.
 
-This branch houses the codebase of Lawnchair 16, which is currently in development and is based on Launcher3 from Android 16. For Lawnchair 9 to 15, see the branches with the `9-` to `15-` prefixes, respectively.
+Try Lawnicons on the latest version of Lawnchair. You can enable themed icons by going to `Home Settings → General → Icon Style` and choosing the desired option.
 
-## Features
-
-- Material 3 Expressive theming that follows your wallpaper and system colors.
-- At a Glance widget support, with integration for [Smartspacer](https://github.com/KieronQuinn/Smartspacer).
-- QuickSwitch support for Android Recents integration on Android 10-15 (root required).
-- Global search for apps, contacts, and web results from the home screen.
-- Customization options for icon packs, fonts, and color settings.
+[Try Lawnchair](https://github.com/LawnchairLauncher/lawnchair#download)
 
 ## Download
 
 <p align="left">
-  <a href="https://play.google.com/store/apps/details?id=app.lawnchair.play">
-    <picture>
-      <!-- Avoid image being clickable with slight workaround -->
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/badge-google-play.webp" height="60">
-      <img alt="Get it on Google Play" src="docs/assets/badge-google-play.webp" height="60">
-    </picture>
-  </a>
-  <a href="https://apt.izzysoft.de/fdroid/index/apk/app.lawnchair">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/badge-izzyondroid.webp" height="60">
-      <img alt="Get it on IzzyOnDroid" src="docs/assets/badge-izzyondroid.webp" height="60">
-    </picture>
-  </a>
-  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/LawnchairLauncher/lawnchair/">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/badge-obtainium.webp" height="60">
-      <img alt="Get it on Obtainium" src="docs/assets/badge-obtainium.webp" height="60">
-    </picture>
-  </a>
-    <a href="https://github.com/LawnchairLauncher/lawnchair/releases">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/badge-github.webp" height="60">
-      <img alt="Get it on GitHub" src="docs/assets/badge-github.webp" height="60">
-    </picture>
-  </a>
+  <a href="https://play.google.com/store/apps/details?id=app.lawnchair.lawnicons.play">
+    <img src="docs/images/badge-google-play.png" alt="Get it on Google Play" height="60" /></a>
+  <a href="https://apt.izzysoft.de/fdroid/index/apk/app.lawnchair.lawnicons">
+    <img src="docs/images/badge-izzyondroid.png" alt="Get it on IzzyOnDroid" height="60" /></a>
+  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/LawnchairLauncher/lawnicons">
+    <img src="docs/images/badge-obtainium.png" alt="Get it on Obtainium" height="60" /></a>
+  <a href="https://github.com/LawnchairLauncher/lawnicons/releases/latest">
+    <img src="docs/images/badge-github.png" alt="Get it on GitHub" height="60" /></a>
 </p>
 
-Lawnchair on Play Store will install as a different app compared to other sources. Features may be restricted to comply with Google Play’s publishing rules.
+Lawnicons on the Play Store will install as a different app from other sources.
 
-You can also [verify your installation](https://docs.lawnchair.app/getting-started/install-and-setup/verify) to check if you have installed an official build.
+### Pre-release version with recent updates
 
-### Development builds
+[nightly.link](https://nightly.link/LawnchairLauncher/lawnicons/workflows/build_debug_apk/develop/Debug%20APK) • [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22app.lawnchair.lawnicons%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FLawnchairLauncher%2Flawnicons%22%2C%22author%22%3A%22LawnchairLauncher%22%2C%22name%22%3A%22Lawnicons%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22Lawnicons%20Nightly%5C%22%2C%5C%22filterReleaseNotesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22dontSortReleasesList%5C%22%3Afalse%2C%5C%22useLatestAssetDateAsReleaseDate%5C%22%3Afalse%2C%5C%22trackOnly%5C%22%3Afalse%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22matchGroupToUse%5C%22%3A%5C%22%5C%22%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22releaseDateAsVersion%5C%22%3Atrue%2C%5C%22useVersionCodeAsOSVersion%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22appName%5C%22%3A%5C%22Lawnicons%20Nightly%5C%22%2C%5C%22shizukuPretendToBeGooglePlay%5C%22%3Afalse%2C%5C%22allowInsecure%5C%22%3Afalse%2C%5C%22exemptFromBackgroundUpdates%5C%22%3Afalse%2C%5C%22skipUpdateNotifications%5C%22%3Afalse%2C%5C%22about%5C%22%3A%5C%22%5C%22%7D%22%2C%22overrideSource%22%3Anull%7D) • [GitHub](https://github.com/LawnchairLauncher/lawnicons/releases/tag/nightly)
 
-Interested in keeping yourself up-to-date with every Lawnchair development? Try our development builds!
+## Supporting
 
-These builds offer the latest features and bug fixes at a cost of performance and additional issues. Make backups before installing.
+> [!IMPORTANT]
+> Support us on Lawnchair's Open Collective or its GitHub to help maintain Lawnicons, add new icons, and review PRs. Supporter icon requests receive higher priority.
 
-Download: [Obtainium][Obtainium link] • [GitHub][GitHub link] • [nightly.link][Nightly link]
+[Open Collective](https://opencollective.com/lawnchair) • [GitHub](https://github.com/sponsors/LawnchairLauncher) • [Submit supporter request](https://github.com/LawnchairLauncher/lawnicons/issues/new?template=submit_supporter_request.yml)
 
-## Sponsors
+### Token of appreciation
+<div align="left">
+    <a href="https://store.steampowered.com/wishlist/id/x9136/?sort=price">
+        <img alt="x9136 • Steam Wishlist" src="https://img.shields.io/badge/x9136_•_Steam_Wishlist-2a475e?logo=steam&logoColor=ffffff">
+    </a>
+</div>
 
-<p align="left">
-  <a href="https://coderabbit.link/lawnchair">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/sponsor-coderabbit-dark.svg" width="300">
-      <img alt="CodeRabbit" src="docs/assets/sponsor-coderabbit-light.svg" width="300">
-    </picture>
-  </a>
-</p>
+## Contributing
+<div align="left">
+    <a href="https://lawnicons-requests.vercel.app/">
+        <img alt="Community-requested icons" src="https://img.shields.io/badge/Community--requested%20icons-94009E?logo=vercel&logoColor=ffffff"></a>
+    <a href="CONTRIBUTING.md">
+        <img alt="Lawnicons guidelines" src="https://img.shields.io/badge/Lawnicons%20guidelines-3F9E00?logo=gitbook&logoColor=ffffff"></a>
+    <a href="https://lawnchair.crowdin.com/lawnicons">
+        <img alt="Lawnicons localization issue" src="https://img.shields.io/badge/Localization-3F9E00?logo=crowdin&logoColor=ffffff"></a>        
+</div> 
 
-[CodeRabbit](https://coderabbit.link/lawnchair) is an AI-powered code review platform that integrates directly into pull-request workflows and IDEs, examining code changes in context and suggesting improvements.
+### Development
+You're welcome to work on our issues. Contributors can get a priority icon request—write to us before you help.
 
-## Support Lawnchair
+[Lawnicons developer wiki](https://github.com/LawnchairLauncher/lawnicons/wiki)
 
-If you love what we do, consider [supporting us on Open Collective](https://opencollective.com/lawnchair)! Your contributions help keep Lawnchair independent and enable us to develop faster.
+### Icons
+It's required to follow the Lawnicons design guidelines. Accepted contributions include: new icons capped at 5 per pull request, missing app IDs, rebranding reports, and updates for outdated icons. 
 
-A huge thank you to our Core Backers ($5+):
-*(These backers directly fund our Project Velocity Fund)*
+[Lawnicons design guidelines](https://github.com/LawnchairLauncher/lawnicons/blob/develop/CONTRIBUTING.md#contributing-icons-tldr) • [Report outdated and low-quality icons](https://github.com/LawnchairLauncher/lawnicons/issues/new?template=report_outdated_and_low_quality_icons.yml)
 
-[![Core Backers](https://opencollective.com/lawnchair/tiers/backer.svg?avatarHeight=64&width=890&button=false)](https://opencollective.com/lawnchair)
+### Icon requests
 
-[Become a supporter](https://opencollective.com/lawnchair) to help us cover our operational costs, or become a Core Backer to be featured here!
+`Open Lawnicons → Tap "Request icons" → Select and request icons`
 
-## Contribute
-
-Visit the [Lawnchair contributing guidelines](CONTRIBUTING.md) for information and tips on contributing to Lawnchair.
-
-## Quick links
-
-- [Website](https://lawnchair.app)
-- [Documentation](https://docs.lawnchair.app/)
-- [News on Telegram](https://t.me/lawnchairci)
-- [Discord](https://discord.com/invite/3x8qNWxgGZ)
-- [X (formerly Twitter)](https://x.com/lawnchairapp)
-- [_XDA_ thread](https://xdaforums.com/t/lawnchair-customizable-pixel-launcher.3627137/)
-
-<!-- Download links -->
-[Nightly link]: https://nightly.link/LawnchairLauncher/lawnchair/workflows/ci/15-dev
-[Obtainium link]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22app.lawnchair.nightly%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Flawnchairlauncher%2Flawnchair%22%2C%22author%22%3A%22Lawnchair%20Launcher%22%2C%22name%22%3A%22Lawnchair%20(Debug)%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Afalse%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22Lawnchair%20Nightly%5C%22%2C%5C%22filterReleaseNotesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22dontSortReleasesList%5C%22%3Afalse%2C%5C%22useLatestAssetDateAsReleaseDate%5C%22%3Afalse%2C%5C%22trackOnly%5C%22%3Afalse%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22matchGroupToUse%5C%22%3A%5C%22%5C%22%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22releaseDateAsVersion%5C%22%3Atrue%2C%5C%22useVersionCodeAsOSVersion%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22appName%5C%22%3A%5C%22%5C%22%2C%5C%22shizukuPretendToBeGooglePlay%5C%22%3Afalse%2C%5C%22exemptFromBackgroundUpdates%5C%22%3Afalse%2C%5C%22skipUpdateNotifications%5C%22%3Afalse%2C%5C%22about%5C%22%3A%5C%22Lawnchair%20is%20a%20free%2C%20open-source%20home%20app%20for%20Android.%20(NOTE%3A%20This%20is%20the%20debug%20version%20of%20Lawnchair%2C%20for%20the%20beta%2Fstable%20versions%20see%20%5C%5C%5C%22Lawnchair%5C%5C%5C%22)%5C%22%7D%22%7D
-[GitHub link]: https://github.com/LawnchairLauncher/lawnchair/releases/tag/nightly
+The only guaranteed way to get an icon added is to contribute it yourself.
