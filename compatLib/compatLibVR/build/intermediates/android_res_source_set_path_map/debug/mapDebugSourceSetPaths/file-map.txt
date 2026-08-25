@@ -1,0 +1,8 @@
+app.lawnchair.compatlib.eleven.compatLibVR-updated_navigation_xml-0 /Users/docmoates/GLauncher/compatLib/compatLibVR/build/generated/updated_navigation_xml/debug
+app.lawnchair.compatlib.eleven.compatLibVR-mergeDebugResources-1 /Users/docmoates/GLauncher/compatLib/compatLibVR/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+app.lawnchair.compatlib.eleven.compatLibVR-mergeDebugResources-2 /Users/docmoates/GLauncher/compatLib/compatLibVR/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+app.lawnchair.compatlib.eleven.compatLibVR-debug-3 /Users/docmoates/GLauncher/compatLib/compatLibVR/build/intermediates/merged_res/debug/mergeDebugResources
+app.lawnchair.compatlib.eleven.compatLibVR-debug-4 /Users/docmoates/GLauncher/compatLib/compatLibVR/build/intermediates/packaged_res/debug/packageDebugResources
+app.lawnchair.compatlib.eleven.compatLibVR-debug-5 /Users/docmoates/GLauncher/compatLib/compatLibVR/src/debug/res
+app.lawnchair.compatlib.eleven.compatLibVR-main-6 /Users/docmoates/GLauncher/compatLib/compatLibVR/src/main/res
+gradleHome-0 /Users/docmoates/.gradle

@@ -1,0 +1,8 @@
+app.lawnchair.compatlib.sixteen.compatLibVBaklava-updated_navigation_xml-0 /Users/docmoates/GLauncher/compatLib/compatLibVBaklava/build/generated/updated_navigation_xml/debug
+app.lawnchair.compatlib.sixteen.compatLibVBaklava-mergeDebugResources-1 /Users/docmoates/GLauncher/compatLib/compatLibVBaklava/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+app.lawnchair.compatlib.sixteen.compatLibVBaklava-mergeDebugResources-2 /Users/docmoates/GLauncher/compatLib/compatLibVBaklava/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+app.lawnchair.compatlib.sixteen.compatLibVBaklava-debug-3 /Users/docmoates/GLauncher/compatLib/compatLibVBaklava/build/intermediates/merged_res/debug/mergeDebugResources
+app.lawnchair.compatlib.sixteen.compatLibVBaklava-debug-4 /Users/docmoates/GLauncher/compatLib/compatLibVBaklava/build/intermediates/packaged_res/debug/packageDebugResources
+app.lawnchair.compatlib.sixteen.compatLibVBaklava-debug-5 /Users/docmoates/GLauncher/compatLib/compatLibVBaklava/src/debug/res
+app.lawnchair.compatlib.sixteen.compatLibVBaklava-main-6 /Users/docmoates/GLauncher/compatLib/compatLibVBaklava/src/main/res
+gradleHome-0 /Users/docmoates/.gradle

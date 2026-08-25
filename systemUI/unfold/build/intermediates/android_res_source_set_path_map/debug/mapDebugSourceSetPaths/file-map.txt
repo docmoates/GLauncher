@@ -1,0 +1,8 @@
+com.android.systemui.unfold-updated_navigation_xml-0 /Users/docmoates/GLauncher/systemUI/unfold/build/generated/updated_navigation_xml/debug
+com.android.systemui.unfold-mergeDebugResources-1 /Users/docmoates/GLauncher/systemUI/unfold/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+com.android.systemui.unfold-mergeDebugResources-2 /Users/docmoates/GLauncher/systemUI/unfold/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+com.android.systemui.unfold-debug-3 /Users/docmoates/GLauncher/systemUI/unfold/build/intermediates/merged_res/debug/mergeDebugResources
+com.android.systemui.unfold-debug-4 /Users/docmoates/GLauncher/systemUI/unfold/build/intermediates/packaged_res/debug/packageDebugResources
+com.android.systemui.unfold-debug-5 /Users/docmoates/GLauncher/systemUI/unfold/src/debug/res
+com.android.systemui.unfold-main-6 /Users/docmoates/GLauncher/systemUI/unfold/src/main/res
+gradleHome-0 /Users/docmoates/.gradle

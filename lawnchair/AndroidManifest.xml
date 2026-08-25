@@ -125,6 +125,17 @@
             android:theme="@style/Theme.Transparent" />
 
         <activity
+            android:name="app.lawnchair.settings.SettingsActivity"
+            android:exported="true"
+            android:label="Launcher Settings"
+            android:theme="@style/Theme.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name="app.lawnchair.smartspace.SmartspacePreferencesShortcut"
             android:theme="@style/Theme.Transparent" />
 

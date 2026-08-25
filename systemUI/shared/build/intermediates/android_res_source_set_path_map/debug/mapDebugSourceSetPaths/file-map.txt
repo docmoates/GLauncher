@@ -1,0 +1,8 @@
+com.android.systemui.shared-updated_navigation_xml-0 /Users/docmoates/GLauncher/systemUI/shared/build/generated/updated_navigation_xml/debug
+com.android.systemui.shared-mergeDebugResources-1 /Users/docmoates/GLauncher/systemUI/shared/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+com.android.systemui.shared-mergeDebugResources-2 /Users/docmoates/GLauncher/systemUI/shared/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+com.android.systemui.shared-debug-3 /Users/docmoates/GLauncher/systemUI/shared/build/intermediates/merged_res/debug/mergeDebugResources
+com.android.systemui.shared-debug-4 /Users/docmoates/GLauncher/systemUI/shared/build/intermediates/packaged_res/debug/packageDebugResources
+com.android.systemui.shared-shared-5 /Users/docmoates/GLauncher/systemUI/shared/res
+com.android.systemui.shared-debug-6 /Users/docmoates/GLauncher/systemUI/shared/src/debug/res
+gradleHome-0 /Users/docmoates/.gradle

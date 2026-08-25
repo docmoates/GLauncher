@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/docmoates/Lawnchair/compatLib/compatLibVS/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest17888564610769970603.xml:2:13-83
+INJECTED from /Users/docmoates/Lawnchair/compatLib/compatLibVS/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest17888564610769970603.xml:2:13-83
+	package
+		INJECTED from /Users/docmoates/Lawnchair/compatLib/compatLibVS/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest17888564610769970603.xml
+	xmlns:android
+		ADDED from /Users/docmoates/Lawnchair/compatLib/compatLibVS/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest17888564610769970603.xml:2:23-81
+uses-sdk
+INJECTED from /Users/docmoates/Lawnchair/compatLib/compatLibVS/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest17888564610769970603.xml reason: use-sdk injection requested
+INJECTED from /Users/docmoates/Lawnchair/compatLib/compatLibVS/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest17888564610769970603.xml
+INJECTED from /Users/docmoates/Lawnchair/compatLib/compatLibVS/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest17888564610769970603.xml
+	android:targetSdkVersion
+		INJECTED from /Users/docmoates/Lawnchair/compatLib/compatLibVS/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest17888564610769970603.xml
+	android:minSdkVersion
+		INJECTED from /Users/docmoates/Lawnchair/compatLib/compatLibVS/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest17888564610769970603.xml
