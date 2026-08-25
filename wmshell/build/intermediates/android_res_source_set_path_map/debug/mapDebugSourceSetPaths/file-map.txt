@@ -1,9 +1,0 @@
-com.android.wm.shell.wmshell-updated_navigation_xml-0 /Users/docmoates/GLauncher/wmshell/build/generated/updated_navigation_xml/debug
-com.android.wm.shell.wmshell-mergeDebugResources-1 /Users/docmoates/GLauncher/wmshell/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-com.android.wm.shell.wmshell-mergeDebugResources-2 /Users/docmoates/GLauncher/wmshell/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-com.android.wm.shell.wmshell-debug-3 /Users/docmoates/GLauncher/wmshell/build/intermediates/merged_res/debug/mergeDebugResources
-com.android.wm.shell.wmshell-debug-4 /Users/docmoates/GLauncher/wmshell/build/intermediates/packaged_res/debug/packageDebugResources
-com.android.wm.shell.wmshell-wmshell-5 /Users/docmoates/GLauncher/wmshell/shared
-com.android.wm.shell.wmshell-shared-6 /Users/docmoates/GLauncher/wmshell/shared/res
-com.android.wm.shell.wmshell-debug-7 /Users/docmoates/GLauncher/wmshell/src/debug/res
-gradleHome-0 /Users/docmoates/.gradle

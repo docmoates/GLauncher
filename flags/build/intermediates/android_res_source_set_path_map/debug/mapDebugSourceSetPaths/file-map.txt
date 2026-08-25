@@ -1,8 +1,0 @@
-com.android.launcher3.flags-updated_navigation_xml-0 /Users/docmoates/GLauncher/flags/build/generated/updated_navigation_xml/debug
-com.android.launcher3.flags-mergeDebugResources-1 /Users/docmoates/GLauncher/flags/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-com.android.launcher3.flags-mergeDebugResources-2 /Users/docmoates/GLauncher/flags/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-com.android.launcher3.flags-debug-3 /Users/docmoates/GLauncher/flags/build/intermediates/merged_res/debug/mergeDebugResources
-com.android.launcher3.flags-debug-4 /Users/docmoates/GLauncher/flags/build/intermediates/packaged_res/debug/packageDebugResources
-com.android.launcher3.flags-debug-5 /Users/docmoates/GLauncher/flags/src/debug/res
-com.android.launcher3.flags-main-6 /Users/docmoates/GLauncher/flags/src/main/res
-gradleHome-0 /Users/docmoates/.gradle

@@ -1,8 +1,0 @@
-app.lawnchair.compatlib.compatLib-updated_navigation_xml-0 /Users/docmoates/GLauncher/compatLib/build/generated/updated_navigation_xml/debug
-app.lawnchair.compatlib.compatLib-mergeDebugResources-1 /Users/docmoates/GLauncher/compatLib/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-app.lawnchair.compatlib.compatLib-mergeDebugResources-2 /Users/docmoates/GLauncher/compatLib/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-app.lawnchair.compatlib.compatLib-debug-3 /Users/docmoates/GLauncher/compatLib/build/intermediates/merged_res/debug/mergeDebugResources
-app.lawnchair.compatlib.compatLib-debug-4 /Users/docmoates/GLauncher/compatLib/build/intermediates/packaged_res/debug/packageDebugResources
-app.lawnchair.compatlib.compatLib-debug-5 /Users/docmoates/GLauncher/compatLib/src/debug/res
-app.lawnchair.compatlib.compatLib-main-6 /Users/docmoates/GLauncher/compatLib/src/main/res
-gradleHome-0 /Users/docmoates/.gradle

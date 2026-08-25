@@ -1,8 +1,0 @@
-app.lawnchair.compatlib.fifteen.compatLibVV-updated_navigation_xml-0 /Users/docmoates/GLauncher/compatLib/compatLibVV/build/generated/updated_navigation_xml/debug
-app.lawnchair.compatlib.fifteen.compatLibVV-mergeDebugResources-1 /Users/docmoates/GLauncher/compatLib/compatLibVV/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-app.lawnchair.compatlib.fifteen.compatLibVV-mergeDebugResources-2 /Users/docmoates/GLauncher/compatLib/compatLibVV/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-app.lawnchair.compatlib.fifteen.compatLibVV-debug-3 /Users/docmoates/GLauncher/compatLib/compatLibVV/build/intermediates/merged_res/debug/mergeDebugResources
-app.lawnchair.compatlib.fifteen.compatLibVV-debug-4 /Users/docmoates/GLauncher/compatLib/compatLibVV/build/intermediates/packaged_res/debug/packageDebugResources
-app.lawnchair.compatlib.fifteen.compatLibVV-debug-5 /Users/docmoates/GLauncher/compatLib/compatLibVV/src/debug/res
-app.lawnchair.compatlib.fifteen.compatLibVV-main-6 /Users/docmoates/GLauncher/compatLib/compatLibVV/src/main/res
-gradleHome-0 /Users/docmoates/.gradle
