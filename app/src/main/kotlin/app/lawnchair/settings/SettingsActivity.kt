@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,7 +25,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -163,10 +166,23 @@ private fun animateColorAsStateCompat(target: Color) =
 
 @Composable
 fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
+    var columns by remember { mutableStateOf(prefs.gridColumns.toFloat()) }
+    var rows by remember { mutableStateOf(prefs.gridRows.toFloat()) }
+    var showSearchBar by remember { mutableStateOf(prefs.showSearchBar) }
+
     SettingsList {
+        item {
+            LivePreview(accent) {
+                HomeScreenPreview(
+                    columns = columns.toInt(),
+                    rows = rows.toInt(),
+                    showSearchBar = showSearchBar,
+                    accent = accent,
+                )
+            }
+        }
         item { SectionHeader("Grid Layout", Icons.Outlined.GridView, accent) }
         item {
-            var columns by remember { mutableStateOf(prefs.gridColumns.toFloat()) }
             SettingSlider(
                 label = "Columns",
                 description = "Icons per row on the home screen",
@@ -181,7 +197,6 @@ fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
             )
         }
         item {
-            var rows by remember { mutableStateOf(prefs.gridRows.toFloat()) }
             SettingSlider(
                 label = "Rows",
                 description = "Icon rows visible per screen",
@@ -197,7 +212,6 @@ fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
         }
         item { SectionHeader("Search", Icons.Outlined.Search, accent) }
         item {
-            var showSearchBar by remember { mutableStateOf(prefs.showSearchBar) }
             SettingToggle(
                 label = "Search Bar",
                 description = "Show the search bar on your home screen",
@@ -215,11 +229,22 @@ fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
 
 @Composable
 fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
+    val themes = listOf("Light", "Dark", "System")
+    var selectedTheme by remember { mutableStateOf(prefs.themeMode) }
+    var showStatusBar by remember { mutableStateOf(prefs.showStatusBar) }
+
     SettingsList {
+        item {
+            LivePreview(accent) {
+                AppearancePreview(
+                    themeMode = selectedTheme,
+                    showStatusBar = showStatusBar,
+                    accent = accent,
+                )
+            }
+        }
         item { SectionHeader("Theme", Icons.Outlined.Palette, accent) }
         item {
-            val themes = listOf("Light", "Dark", "System")
-            var selectedTheme by remember { mutableStateOf(prefs.themeMode) }
             SettingDropdown(
                 label = "Theme Mode",
                 description = "Choose how the launcher looks",
@@ -235,7 +260,6 @@ fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
         }
         item { SectionHeader("System Bars", Icons.Outlined.PhoneAndroid, accent) }
         item {
-            var showStatusBar by remember { mutableStateOf(prefs.showStatusBar) }
             SettingToggle(
                 label = "Status Bar",
                 description = "Show the clock and icons at the top",
@@ -253,10 +277,23 @@ fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
 
 @Composable
 fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
+    var showDock by remember { mutableStateOf(prefs.showDock) }
+    var opacity by remember { mutableStateOf(prefs.dockBackgroundOpacity) }
+    var gridSize by remember { mutableStateOf(prefs.dockGridSize.toFloat()) }
+
     SettingsList {
+        item {
+            LivePreview(accent) {
+                DockPreview(
+                    showDock = showDock,
+                    dockIcons = gridSize.toInt(),
+                    opacity = opacity,
+                    accent = accent,
+                )
+            }
+        }
         item { SectionHeader("Dock", Icons.Outlined.ViewAgenda, accent) }
         item {
-            var showDock by remember { mutableStateOf(prefs.showDock) }
             SettingToggle(
                 label = "Show Dock",
                 description = "Keep your favorite apps within reach",
@@ -270,7 +307,6 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
             )
         }
         item {
-            var opacity by remember { mutableStateOf(prefs.dockBackgroundOpacity) }
             SettingSlider(
                 label = "Background Opacity",
                 description = "How solid the dock background appears",
@@ -286,7 +322,6 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
             )
         }
         item {
-            var gridSize by remember { mutableStateOf(prefs.dockGridSize.toFloat()) }
             SettingSlider(
                 label = "Dock Icons",
                 description = "Number of icons in the dock",
@@ -305,10 +340,23 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
 
 @Composable
 fun AppDrawerSettingsTab(prefs: LauncherPreferences, accent: Color) {
+    var columns by remember { mutableStateOf(prefs.appDrawerColumns.toFloat()) }
+    var searchEnabled by remember { mutableStateOf(prefs.appDrawerSearchEnabled) }
+    val sortOptions = listOf("Alphabetical", "Recent", "Frequency")
+    var selectedSort by remember { mutableStateOf(prefs.appDrawerSortBy) }
+
     SettingsList {
+        item {
+            LivePreview(accent) {
+                AppDrawerPreview(
+                    columns = columns.toInt(),
+                    showSearch = searchEnabled,
+                    accent = accent,
+                )
+            }
+        }
         item { SectionHeader("App Drawer", Icons.Outlined.Apps, accent) }
         item {
-            var columns by remember { mutableStateOf(prefs.appDrawerColumns.toFloat()) }
             SettingSlider(
                 label = "Columns",
                 description = "Icons per row in the app drawer",
@@ -323,7 +371,6 @@ fun AppDrawerSettingsTab(prefs: LauncherPreferences, accent: Color) {
             )
         }
         item {
-            var searchEnabled by remember { mutableStateOf(prefs.appDrawerSearchEnabled) }
             SettingToggle(
                 label = "Search",
                 description = "Find apps quickly by typing",
@@ -337,8 +384,6 @@ fun AppDrawerSettingsTab(prefs: LauncherPreferences, accent: Color) {
             )
         }
         item {
-            val sortOptions = listOf("Alphabetical", "Recent", "Frequency")
-            var selectedSort by remember { mutableStateOf(prefs.appDrawerSortBy) }
             SettingDropdown(
                 label = "Sort By",
                 description = "How apps are ordered in the drawer",
@@ -486,6 +531,252 @@ fun SettingsList(content: androidx.compose.foundation.lazy.LazyListScope.() -> U
         verticalArrangement = Arrangement.spacedBy(10.dp),
         content = content,
     )
+}
+
+// ---------- Live preview ----------
+
+@Composable
+fun LivePreview(accent: Color, content: @Composable BoxScope.() -> Unit) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(accent)
+            )
+            Spacer(modifier = Modifier.width(7.dp))
+            Text(
+                text = "LIVE PREVIEW",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
+                color = accent,
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            accent.copy(alpha = 0.16f),
+                            MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                    )
+                )
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp))
+                .padding(16.dp),
+            content = content,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+@Composable
+private fun PreviewIcon(tint: Color, size: androidx.compose.ui.unit.Dp = 30.dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(9.dp))
+            .background(tint)
+    )
+}
+
+@Composable
+fun HomeScreenPreview(columns: Int, rows: Int, showSearchBar: Boolean, accent: Color) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (showSearchBar) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.55f))
+                    .padding(horizontal = 12.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.Search,
+                    contentDescription = null,
+                    tint = Color.Black.copy(alpha = 0.45f),
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+        val visibleRows = rows.coerceAtMost(5)
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                repeat(visibleRows) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        repeat(columns) {
+                            PreviewIcon(tint = accent.copy(alpha = 0.55f), size = 20.dp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DockPreview(showDock: Boolean, dockIcons: Int, opacity: Float, accent: Color) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(2) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        repeat(4) {
+                            PreviewIcon(tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f), size = 22.dp)
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        if (showDock) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(accent.copy(alpha = 0.25f + opacity * 0.6f))
+                    .padding(horizontal = 10.dp)
+            ) {
+                repeat(dockIcons) {
+                    PreviewIcon(tint = Color.White.copy(alpha = 0.85f), size = 26.dp)
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "Dock hidden",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AppDrawerPreview(columns: Int, showSearch: Boolean, accent: Color) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (showSearch) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.Search,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(13.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Search apps", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(3) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        repeat(columns) {
+                            PreviewIcon(tint = accent.copy(alpha = 0.5f), size = 22.dp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppearancePreview(themeMode: String, showStatusBar: Boolean, accent: Color) {
+    val isDark = when (themeMode.lowercase()) {
+        "dark" -> true
+        "light" -> false
+        else -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
+    val phoneBg = if (isDark) Color(0xFF1C1A16) else Color.White
+    val phoneFg = if (isDark) Color(0xFFEAE4D9) else Color(0xFF2B2620)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(16.dp))
+            .background(phoneBg)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (showStatusBar) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(22.dp)
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("9:41", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = phoneFg)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        repeat(3) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(phoneFg.copy(alpha = 0.6f))
+                            )
+                        }
+                    }
+                }
+            }
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    PreviewIcon(tint = accent, size = 34.dp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = when {
+                            themeMode.equals("system", ignoreCase = true) -> "System (${if (isDark) "Dark" else "Light"})"
+                            else -> themeMode.replaceFirstChar { it.uppercase() }
+                        },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = phoneFg,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
