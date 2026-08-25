@@ -8,6 +8,14 @@
         <item name="android:colorAccent">@color/colorAccent</item>
     </style>
 
+    <!-- No-ActionBar theme for Compose screens (e.g. SettingsActivity) -->
+    <style name="Theme.NoActionBar" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/colorPrimary</item>
+        <item name="android:colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
     <!-- Transparent theme for PermissionActivity -->
     <style name="Theme.Transparent" parent="android:Theme">
         <item name="android:windowIsTranslucent">true</item>

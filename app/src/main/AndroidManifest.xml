@@ -43,7 +43,7 @@
             android:name=".settings.SettingsActivity"
             android:exported="true"
             android:label="Launcher Settings"
-            android:theme="@style/AppTheme">
+            android:theme="@style/Theme.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
