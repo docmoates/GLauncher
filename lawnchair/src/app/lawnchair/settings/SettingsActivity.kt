@@ -306,7 +306,10 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 icon = Icons.Outlined.Apps,
                 accent = accent,
                 checked = showDock,
-                onCheckedChange = { hotseatEnabledAdapter.onChange(it) }
+                onCheckedChange = {
+                    hotseatEnabledAdapter.onChange(it)
+                    if (it) hotseatBgAdapter.onChange(true)
+                }
             )
         }
         item {
