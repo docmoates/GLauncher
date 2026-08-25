@@ -32,6 +32,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.lawnchair.preferences.getAdapter
+import app.lawnchair.preferences.preferenceManager
+import app.lawnchair.preferences2.preferenceManager2
 
 private data class SettingsSection(
     val label: String,
@@ -166,16 +169,19 @@ private fun animateColorAsStateCompat(target: Color) =
 
 @Composable
 fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
-    var columns by remember { mutableStateOf(prefs.gridColumns.toFloat()) }
-    var rows by remember { mutableStateOf(prefs.gridRows.toFloat()) }
+    val legacyPrefs = preferenceManager()
+    val columnsAdapter = legacyPrefs.workspaceColumns.getAdapter()
+    val rowsAdapter = legacyPrefs.workspaceRows.getAdapter()
+    val columns = columnsAdapter.state.value
+    val rows = rowsAdapter.state.value
     var showSearchBar by remember { mutableStateOf(prefs.showSearchBar) }
 
     SettingsList {
         item {
             LivePreview(accent) {
                 HomeScreenPreview(
-                    columns = columns.toInt(),
-                    rows = rows.toInt(),
+                    columns = columns,
+                    rows = rows,
                     showSearchBar = showSearchBar,
                     accent = accent,
                 )
@@ -188,12 +194,9 @@ fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 description = "Icons per row on the home screen",
                 icon = Icons.Outlined.ViewColumn,
                 accent = accent,
-                value = columns,
-                range = 3f..7f,
-                onValueChange = {
-                    columns = it
-                    prefs.gridColumns = it.toInt()
-                }
+                value = columns.toFloat(),
+                range = 3f..8f,
+                onValueChange = { columnsAdapter.onChange(it.toInt()) }
             )
         }
         item {
@@ -202,19 +205,16 @@ fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 description = "Icon rows visible per screen",
                 icon = Icons.Outlined.TableRows,
                 accent = accent,
-                value = rows,
-                range = 4f..8f,
-                onValueChange = {
-                    rows = it
-                    prefs.gridRows = it.toInt()
-                }
+                value = rows.toFloat(),
+                range = 3f..9f,
+                onValueChange = { rowsAdapter.onChange(it.toInt()) }
             )
         }
         item { SectionHeader("Search", Icons.Outlined.Search, accent) }
         item {
             SettingToggle(
                 label = "Search Bar",
-                description = "Show the search bar on your home screen",
+                description = "Show the search bar on your home screen (not yet connected to the launcher)",
                 icon = Icons.Outlined.Search,
                 accent = accent,
                 checked = showSearchBar,
@@ -231,7 +231,9 @@ fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
 fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
     val themes = listOf("Light", "Dark", "System")
     var selectedTheme by remember { mutableStateOf(prefs.themeMode) }
-    var showStatusBar by remember { mutableStateOf(prefs.showStatusBar) }
+    val prefs2 = preferenceManager2()
+    val statusBarAdapter = prefs2.showStatusBar.getAdapter()
+    val showStatusBar = statusBarAdapter.state.value
 
     SettingsList {
         item {
@@ -247,7 +249,7 @@ fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
         item {
             SettingDropdown(
                 label = "Theme Mode",
-                description = "Choose how the launcher looks",
+                description = "Choose how the launcher looks (not yet connected)",
                 icon = Icons.Outlined.Contrast,
                 accent = accent,
                 options = themes,
@@ -266,10 +268,7 @@ fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 icon = Icons.Outlined.SignalCellularAlt,
                 accent = accent,
                 checked = showStatusBar,
-                onCheckedChange = {
-                    showStatusBar = it
-                    prefs.showStatusBar = it
-                }
+                onCheckedChange = { statusBarAdapter.onChange(it) }
             )
         }
     }
@@ -277,16 +276,23 @@ fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
 
 @Composable
 fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
-    var showDock by remember { mutableStateOf(prefs.showDock) }
-    var opacity by remember { mutableStateOf(prefs.dockBackgroundOpacity) }
-    var gridSize by remember { mutableStateOf(prefs.dockGridSize.toFloat()) }
+    val prefs2 = preferenceManager2()
+    val legacyPrefs = preferenceManager()
+    val hotseatEnabledAdapter = prefs2.isHotseatEnabled.getAdapter()
+    val hotseatBgAdapter = legacyPrefs.hotseatBG.getAdapter()
+    val hotseatBgAlphaAdapter = legacyPrefs.hotseatBGAlpha.getAdapter()
+    val hotseatColumnsAdapter = legacyPrefs.hotseatColumns.getAdapter()
+
+    val showDock = hotseatEnabledAdapter.state.value
+    val opacity = hotseatBgAlphaAdapter.state.value / 100f
+    val gridSize = hotseatColumnsAdapter.state.value
 
     SettingsList {
         item {
             LivePreview(accent) {
                 DockPreview(
                     showDock = showDock,
-                    dockIcons = gridSize.toInt(),
+                    dockIcons = gridSize,
                     opacity = opacity,
                     accent = accent,
                 )
@@ -300,10 +306,7 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 icon = Icons.Outlined.Apps,
                 accent = accent,
                 checked = showDock,
-                onCheckedChange = {
-                    showDock = it
-                    prefs.showDock = it
-                }
+                onCheckedChange = { hotseatEnabledAdapter.onChange(it) }
             )
         }
         item {
@@ -316,8 +319,8 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 range = 0f..1f,
                 valueLabel = { "${(it * 100).toInt()}%" },
                 onValueChange = {
-                    opacity = it
-                    prefs.dockBackgroundOpacity = it
+                    hotseatBgAdapter.onChange(true)
+                    hotseatBgAlphaAdapter.onChange((it * 100).toInt())
                 }
             )
         }
@@ -327,12 +330,9 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 description = "Number of icons in the dock",
                 icon = Icons.Outlined.Apps,
                 accent = accent,
-                value = gridSize,
-                range = 3f..7f,
-                onValueChange = {
-                    gridSize = it
-                    prefs.dockGridSize = it.toInt()
-                }
+                value = gridSize.toFloat(),
+                range = 3f..10f,
+                onValueChange = { hotseatColumnsAdapter.onChange(it.toInt()) }
             )
         }
     }
@@ -359,7 +359,7 @@ fun AppDrawerSettingsTab(prefs: LauncherPreferences, accent: Color) {
         item {
             SettingSlider(
                 label = "Columns",
-                description = "Icons per row in the app drawer",
+                description = "Icons per row in the app drawer (not yet connected)",
                 icon = Icons.Outlined.GridView,
                 accent = accent,
                 value = columns,
@@ -373,7 +373,7 @@ fun AppDrawerSettingsTab(prefs: LauncherPreferences, accent: Color) {
         item {
             SettingToggle(
                 label = "Search",
-                description = "Find apps quickly by typing",
+                description = "Find apps quickly by typing (not yet connected)",
                 icon = Icons.Outlined.Search,
                 accent = accent,
                 checked = searchEnabled,
@@ -386,7 +386,7 @@ fun AppDrawerSettingsTab(prefs: LauncherPreferences, accent: Color) {
         item {
             SettingDropdown(
                 label = "Sort By",
-                description = "How apps are ordered in the drawer",
+                description = "How apps are ordered in the drawer (not yet connected)",
                 icon = Icons.Outlined.Sort,
                 accent = accent,
                 options = sortOptions,
@@ -409,7 +409,7 @@ fun GestureSettingsTab(prefs: LauncherPreferences, accent: Color) {
             var swipeUp by remember { mutableStateOf(prefs.swipeUpGesture) }
             SettingDropdown(
                 label = "Swipe Up",
-                description = "Action when swiping up from home",
+                description = "Action when swiping up from home (not yet connected)",
                 icon = Icons.Outlined.SwipeUp,
                 accent = accent,
                 options = gestureOptions,
@@ -425,7 +425,7 @@ fun GestureSettingsTab(prefs: LauncherPreferences, accent: Color) {
             var doubleTap by remember { mutableStateOf(prefs.doubleTapGesture) }
             SettingDropdown(
                 label = "Double Tap",
-                description = "Action when double-tapping home",
+                description = "Action when double-tapping home (not yet connected)",
                 icon = Icons.Outlined.TouchApp,
                 accent = accent,
                 options = gestureOptions,
@@ -441,7 +441,7 @@ fun GestureSettingsTab(prefs: LauncherPreferences, accent: Color) {
             var longPress by remember { mutableStateOf(prefs.longPressGesture) }
             SettingDropdown(
                 label = "Long Press",
-                description = "Action when long-pressing home",
+                description = "Action when long-pressing home (not yet connected)",
                 icon = Icons.Outlined.PanTool,
                 accent = accent,
                 options = gestureOptions,
@@ -464,7 +464,7 @@ fun MoreSettingsTab(prefs: LauncherPreferences, accent: Color) {
             var animSpeed by remember { mutableStateOf(prefs.animationSpeed) }
             SettingDropdown(
                 label = "Animation Speed",
-                description = "How fast transitions play",
+                description = "How fast transitions play (not yet connected)",
                 icon = Icons.Outlined.Speed,
                 accent = accent,
                 options = speeds,
@@ -479,7 +479,7 @@ fun MoreSettingsTab(prefs: LauncherPreferences, accent: Color) {
             var iconAnim by remember { mutableStateOf(prefs.iconAnimationEnabled) }
             SettingToggle(
                 label = "Icon Animations",
-                description = "Playful motion when opening apps",
+                description = "Playful motion when opening apps (not yet connected)",
                 icon = Icons.Outlined.AutoAwesome,
                 accent = accent,
                 checked = iconAnim,
@@ -494,7 +494,7 @@ fun MoreSettingsTab(prefs: LauncherPreferences, accent: Color) {
             var badges by remember { mutableStateOf(prefs.showNotificationBadges) }
             SettingToggle(
                 label = "Notification Badges",
-                description = "Small dots on apps with alerts",
+                description = "Small dots on apps with alerts (not yet connected)",
                 icon = Icons.Outlined.Circle,
                 accent = accent,
                 checked = badges,
@@ -508,7 +508,7 @@ fun MoreSettingsTab(prefs: LauncherPreferences, accent: Color) {
             var count by remember { mutableStateOf(prefs.showNotificationCount) }
             SettingToggle(
                 label = "Show Count",
-                description = "Display the number of notifications",
+                description = "Display the number of notifications (not yet connected)",
                 icon = Icons.Outlined.Numbers,
                 accent = accent,
                 checked = count,
