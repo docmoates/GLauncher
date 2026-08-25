@@ -1,21 +1,10 @@
 *.iml
 .gradle
-local.properties
-.idea
-.kotlin
+/local.properties
+/.idea/workspace.xml
+/.idea/libraries
 .DS_Store
-build
-captures
+/build
+/captures
 .externalNativeBuild
-.cxx
-keystore.properties
-app/src/dark
-app/src/light
-app/src/runtime
-__pycache__/
-
-# IDEs cache directory
-.vs/
-.idea/
-.vscode/
-.vsc/
+.idea

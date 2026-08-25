@@ -1,0 +1,57 @@
+apply plugin: 'com.android.application'
+
+final def commitHash = { ->
+    final def stdout = new ByteArrayOutputStream()
+    exec {
+        commandLine 'git', 'rev-parse', '--short=7', 'HEAD'
+        standardOutput = stdout
+    }
+    stdout.toString().trim()
+}
+
+android {
+    compileSdkVersion 29
+    buildToolsVersion "29.0.2"
+
+    defaultConfig {
+        applicationId "app.lawnchair.lawnfeed"
+        minSdkVersion 21
+        targetSdkVersion 29
+
+        versionCode 1
+        versionName "4.0+${commitHash()}"
+
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "Lawnfeed ${variant.versionName}.apk"
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation "androidx.core:core:1.0.2"
+    implementation('com.googlecode.json-simple:json-simple:1.1.1') {
+        exclude group: 'org.hamcrest', module: 'hamcrest-core'
+    }
+    implementation project(':launcherclient')
+}
+
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'
