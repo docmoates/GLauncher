@@ -343,16 +343,30 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
     // stay wider than that icon spread or the edge icons clip outside the
     // pill. More columns packs icons tighter, closer to the macOS look.
     // InsetDrawable insets are raw pixels; corner radius is dp.
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    fun dpToPx(dp: Float): Int = with(density) { dp.dp.roundToPx() }
+
     fun applyMacDockStyle() {
         hotseatModeAdapter.onChange(app.lawnchair.hotseat.DisabledHotseat)
         hotseatColumnsAdapter.onChange(5)
         if (isFoldable) hotseatColumnsUnfoldedAdapter.onChange(8)
         hotseatCornerRadiusAdapter.onChange(32f)
         hotseatBgAlphaAdapter.onChange(85)
-        hotseatInsetTopAdapter.onChange(16)
-        hotseatInsetBottomAdapter.onChange(150)
-        hotseatInsetLeftAdapter.onChange(40)
-        hotseatInsetRightAdapter.onChange(40)
+        // Vertical insets (hotseatBGVerticalInsetTop/Bottom) are set here for
+        // completeness but are NOT what actually controls vertical padding -
+        // Hotseat.centerBackgroundOnIcons() measures the real icon bounds
+        // every layout pass and applies its own fixed dp padding
+        // (DOCK_PILL_PADDING_TOP_DP / _BOTTOM_DP), overriding whatever is
+        // stored here. Horizontal insets have no such override, so those
+        // must be converted from dp to this device's actual pixels -
+        // hardcoding a raw pixel literal here previously meant the margin
+        // tuned on one emulator's density was a different physical size (and
+        // on higher-density phones, uncomfortably thin) on every other
+        // device.
+        hotseatInsetTopAdapter.onChange(0)
+        hotseatInsetBottomAdapter.onChange(0)
+        hotseatInsetLeftAdapter.onChange(dpToPx(14f))
+        hotseatInsetRightAdapter.onChange(dpToPx(14f))
         hotseatBgColorAdapter.onChange(app.lawnchair.theme.color.ColorOption.CustomColor(0xFF1C1C1E.toInt()))
     }
 

@@ -97,6 +97,8 @@ public class Hotseat extends FrameLayout implements Insettable {
     private static final int BUBBLE_BAR_ADJUSTMENT_ANIMATION_DURATION_MS = 250;
     private static final int DOCK_PAGE_INDICATOR_HEIGHT_DP = 8;
     private static final float DOCK_ICON_SCALE = 0.85f;
+    private static final float DOCK_PILL_PADDING_TOP_DP = 10f;
+    private static final float DOCK_PILL_PADDING_BOTTOM_DP = 14f;
 
     @ViewDebug.ExportedProperty(category = "launcher")
     private boolean mHasVerticalHotseat;
@@ -271,9 +273,20 @@ public class Hotseat extends FrameLayout implements Insettable {
         int rowTop = origin + childTop;
         int rowBottom = origin + childBottom;
 
-        int padding = preferenceManager.getHotseatBGVerticalInsetTop().get();
-        int top = Math.max(0, rowTop - padding);
-        int bottom = Math.max(0, getHeight() - rowBottom - padding);
+        // Fixed dp padding around the measured icon row, converted to pixels
+        // for THIS device's density. Previously this reused the raw
+        // hotseatBGVerticalInsetTop preference (itself a fixed pixel value
+        // tuned on one emulator's density) as a single symmetric top/bottom
+        // padding - both wrong in the same way: a pixel count tuned for one
+        // screen density is a different physical size on every other
+        // density, and a bottom margin of ~16px (~5dp at 3x) is too thin to
+        // read as "inside" the pill rather than flush against its edge,
+        // especially once labels add a text row right at that boundary.
+        float density = getResources().getDisplayMetrics().density;
+        int paddingTop = (int) (DOCK_PILL_PADDING_TOP_DP * density);
+        int paddingBottom = (int) (DOCK_PILL_PADDING_BOTTOM_DP * density);
+        int top = Math.max(0, rowTop - paddingTop);
+        int bottom = Math.max(0, getHeight() - rowBottom - paddingBottom);
         applyBackground(top, bottom);
     }
 
