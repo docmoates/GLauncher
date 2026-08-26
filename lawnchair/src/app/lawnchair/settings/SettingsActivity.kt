@@ -289,24 +289,32 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
     val hotseatInsetLeftAdapter = legacyPrefs.hotseatBGHorizontalInsetLeft.getAdapter()
     val hotseatInsetRightAdapter = legacyPrefs.hotseatBGHorizontalInsetRight.getAdapter()
     val hotseatBgColorAdapter = prefs2.hotseatBackgroundColor.getAdapter()
+    val hotseatModeAdapter = prefs2.hotseatMode.getAdapter()
 
-    // Rounded card around just the icon row, no search bar inside it.
-    // Hotseat extends CellLayout - the SAME grid system as the home
-    // screen - so icon x-positions are fixed at full-width grid columns
-    // by design (dock icons align under home screen columns). A narrow
-    // "floating pill" background (previously 140px insets) ends up
-    // NARROWER than that fixed icon spread, clipping the edge icons.
-    // Insets here are kept small enough to stay wider than the icon
-    // row instead of fighting the grid. InsetDrawable takes raw pixels,
-    // not dp.
+    // macOS-style dock: dark rounded pill hugging a tightly-packed row of
+    // app icons, with no search bar at all.
+    //
+    // Removing the search bar needs HotseatMode = DisabledHotseat, NOT
+    // hotseatQsbAlpha=0 - alpha only fades the search bar's own background
+    // while its Google/mic glyphs keep rendering. DisabledHotseat points the
+    // QSB at R.layout.empty_view, which makes DeviceProfile compute
+    // qsbHeight=0 and collapse the whole row (see HotseatProfile.kt).
+    //
+    // Hotseat extends CellLayout - the same grid the home screen uses - so
+    // icon x-positions are fixed at full-width grid columns. Insets must
+    // stay wider than that icon spread or the edge icons clip outside the
+    // pill. More columns packs icons tighter, closer to the macOS look.
+    // InsetDrawable insets are raw pixels; corner radius is dp.
     fun applyMacDockStyle() {
-        hotseatQsbAlphaAdapter.onChange(0)
-        hotseatCornerRadiusAdapter.onChange(28f)
+        hotseatModeAdapter.onChange(app.lawnchair.hotseat.DisabledHotseat)
+        hotseatColumnsAdapter.onChange(6)
+        hotseatCornerRadiusAdapter.onChange(32f)
+        hotseatBgAlphaAdapter.onChange(85)
         hotseatInsetTopAdapter.onChange(16)
-        hotseatInsetBottomAdapter.onChange(260)
-        hotseatInsetLeftAdapter.onChange(60)
-        hotseatInsetRightAdapter.onChange(60)
-        hotseatBgColorAdapter.onChange(app.lawnchair.theme.color.ColorOption.CustomColor(0xFFFFFFFF.toInt()))
+        hotseatInsetBottomAdapter.onChange(150)
+        hotseatInsetLeftAdapter.onChange(40)
+        hotseatInsetRightAdapter.onChange(40)
+        hotseatBgColorAdapter.onChange(app.lawnchair.theme.color.ColorOption.CustomColor(0xFF1C1C1E.toInt()))
     }
 
     val showDock = hotseatEnabledAdapter.state.value
