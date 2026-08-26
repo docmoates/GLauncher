@@ -688,7 +688,13 @@ fun GestureSettingsTab(prefs: LauncherPreferences, accent: Color) {
 
 @Composable
 fun MoreSettingsTab(prefs: LauncherPreferences, accent: Color) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val updateChecker = remember { UpdateChecker(context.applicationContext) }
+    val updateState by updateChecker.state.collectAsState()
+
     SettingsList {
+        item { SectionHeader("Software Update", Icons.Outlined.SystemUpdate, accent) }
+        item { UpdateCard(updateState, accent, updateChecker) }
         item { SectionHeader("Animations", Icons.Outlined.Animation, accent) }
         item {
             val speeds = listOf("Slow", "Normal", "Fast")
@@ -749,6 +755,105 @@ fun MoreSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 }
             )
         }
+    }
+}
+
+@Composable
+fun UpdateCard(state: UpdateState, accent: Color, checker: UpdateChecker) {
+    val currentVersion = com.android.launcher3.BuildConfig.VERSION_NAME
+    SettingCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Outlined.SystemUpdate, accent)
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Launcher Version",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Currently on $currentVersion",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        when (state) {
+            is UpdateState.Idle -> {
+                UpdateButton("Check for Updates", accent) { checker.checkForUpdate() }
+            }
+            is UpdateState.Checking -> {
+                UpdateStatusRow("Checking for updates…", accent)
+            }
+            is UpdateState.UpToDate -> {
+                UpdateStatusRow("You're up to date", accent, icon = Icons.Filled.Check)
+                Spacer(modifier = Modifier.height(8.dp))
+                UpdateButton("Check Again", accent) { checker.checkForUpdate() }
+            }
+            is UpdateState.Available -> {
+                Text(
+                    "Version ${state.release.versionName} is available",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = accent,
+                )
+                if (state.release.releaseNotes.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        state.release.releaseNotes,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                UpdateButton("Download Update", accent) { checker.downloadUpdate() }
+            }
+            is UpdateState.Downloading -> {
+                UpdateStatusRow("Downloading… ${(state.progress * 100).toInt()}%", accent)
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = accent,
+                    trackColor = accent.copy(alpha = 0.18f),
+                )
+            }
+            is UpdateState.Downloaded -> {
+                UpdateStatusRow("Ready to install ${state.release.versionName}", accent, icon = Icons.Filled.Check)
+                Spacer(modifier = Modifier.height(8.dp))
+                UpdateButton("Install Update", accent) { checker.installUpdate(state.file) }
+            }
+            is UpdateState.Failed -> {
+                UpdateStatusRow(state.message, MaterialTheme.colorScheme.error)
+                Spacer(modifier = Modifier.height(8.dp))
+                UpdateButton("Try Again", accent) { checker.checkForUpdate() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateStatusRow(text: String, tint: Color, icon: ImageVector? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+        Text(text, fontSize = 13.sp, color = tint)
+    }
+}
+
+@Composable
+private fun UpdateButton(label: String, accent: Color, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(containerColor = accent),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
