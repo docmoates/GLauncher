@@ -1,5 +1,32 @@
 # GLauncher TODO
 
+## Configure secrets for cloud publishing of in-app updates
+
+A new GitHub Actions workflow, **"Publish in-app update"**
+(`.github/workflows/publish_update.yml`), builds the APK in the cloud and
+deploys it + `latest.json` to `updates.xmethod.org` — the same thing
+`tools/publish-update.sh` does from your Mac, but runnable from anywhere
+(including by Claude sessions). It needs these **repository secrets**
+(GitHub → GLauncher repo → Settings → Secrets and variables → Actions):
+
+- [ ] `KEYSTORE` — your signing keystore, base64-encoded
+      (`base64 -i ~/.android/debug.keystore | pbcopy` if your installed
+      builds are debug-signed from your Mac). **Must be the same key that
+      signed the build currently on your phone**, or Android will refuse
+      the update install.
+- [ ] `KEYSTORE_PASSWORD` — keystore password (`android` for the default
+      debug keystore)
+- [ ] `KEY_ALIAS` — key alias (`androiddebugkey` for the debug keystore)
+- [ ] `KEY_PASSWORD` — key password (`android` for the debug keystore)
+- [ ] `XMETHOD_SSH_KEY` — private key contents for the `xmethod` SSH host
+      (the one your `~/.ssh/config` alias uses)
+- [ ] `XMETHOD_SSH_HOST` — the hostname behind the `xmethod` alias
+- [ ] `XMETHOD_SSH_USER` — the SSH username for that host
+
+Once set, publishing an update = run the "Publish in-app update" workflow
+from the Actions tab (or ask Claude to trigger it). Version codes
+auto-increment per run, so devices always see it as newer.
+
 ## Configure Google Cloud credentials for Google-powered search
 
 The launcher now ships search providers for **Gmail, Google Docs, Sheets,

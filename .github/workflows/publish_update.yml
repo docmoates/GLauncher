@@ -1,0 +1,101 @@
+name: Publish in-app update
+
+# Builds the GLauncher APK, signs it with the repo keystore secrets, and
+# deploys it plus latest.json to updates.xmethod.org so the in-app
+# "Software Update" screen (UpdateChecker.kt) offers it to installed
+# devices. CI equivalent of tools/publish-update.sh.
+#
+# Required repository secrets (see todo.md):
+#   KEYSTORE / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD - signing key,
+#     must be the SAME key that signed the build currently installed on
+#     your devices, or Android will refuse the update.
+#   XMETHOD_SSH_KEY / XMETHOD_SSH_HOST / XMETHOD_SSH_USER - deploy target.
+
+on:
+  workflow_dispatch:
+    inputs:
+      releaseNotes:
+        description: Release notes shown in the in-app updater
+        type: string
+        required: false
+        default: ""
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Write sign info
+        run: |
+          if [ ! -z "${{ secrets.KEYSTORE }}" ]; then
+            echo storePassword='${{ secrets.KEYSTORE_PASSWORD }}' >> keystore.properties
+            echo keyAlias='${{ secrets.KEY_ALIAS }}' >> keystore.properties
+            echo keyPassword='${{ secrets.KEY_PASSWORD }}' >> keystore.properties
+            echo storeFile='${{ github.workspace }}/key.jks' >> keystore.properties
+            echo ${{ secrets.KEYSTORE }} | base64 --decode > ${{ github.workspace }}/key.jks
+          else
+            echo "::warning::KEYSTORE secret not set - APK will be debug-signed with a throwaway key and will NOT install over an existing installation (see todo.md)"
+          fi
+      - name: Build APK
+        run: |
+          export GLAUNCHER_VERSION_CODE=$((1600010505 + ${{ github.run_number }}))
+          echo "Building with versionCode $GLAUNCHER_VERSION_CODE"
+          ./gradlew assembleLawnWithQuickstepGithubDebug
+      - name: Generate update manifest
+        env:
+          NOTES: ${{ github.event.inputs.releaseNotes }}
+        run: |
+          APK="$(find build/outputs/apk -path '*lawnWithQuickstepGithub*' -name '*.apk' | head -1)"
+          [ -n "$APK" ] || { echo "No APK found"; exit 1; }
+          AAPT="$(ls "$ANDROID_HOME"/build-tools/*/aapt | sort -V | tail -1)"
+          BADGING="$("$AAPT" dump badging "$APK")"
+          VNAME="$(grep -oE "versionName='[^']*'" <<< "$BADGING" | head -1 | cut -d"'" -f2)"
+          VCODE="$(grep -oE "versionCode='[^']*'" <<< "$BADGING" | head -1 | cut -d"'" -f2)"
+          SHA="$(sha256sum "$APK" | awk '{print $1}')"
+          SIZE="$(stat -c%s "$APK")"
+          mkdir -p out
+          cp "$APK" out/GLauncher.apk
+          export VCODE VNAME SHA SIZE
+          python3 -c '
+          import json, os
+          json.dump({
+              "versionCode": int(os.environ["VCODE"]),
+              "versionName": os.environ["VNAME"],
+              "releaseNotes": os.environ.get("NOTES", ""),
+              "downloadUrl": "https://updates.xmethod.org/GLauncher.apk",
+              "sha256": os.environ["SHA"],
+              "fileSize": int(os.environ["SIZE"]),
+          }, open("out/latest.json", "w"), indent=2)
+          '
+          echo "Publishing GLauncher v$VNAME ($VCODE)"
+          cat out/latest.json
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: GLauncher-update
+          path: out/
+      - name: Deploy to updates.xmethod.org
+        env:
+          SSH_KEY: ${{ secrets.XMETHOD_SSH_KEY }}
+          SSH_HOST: ${{ secrets.XMETHOD_SSH_HOST }}
+          SSH_USER: ${{ secrets.XMETHOD_SSH_USER }}
+        run: |
+          if [ -z "$SSH_KEY" ] || [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
+            echo "::error::XMETHOD_SSH_KEY / XMETHOD_SSH_HOST / XMETHOD_SSH_USER secrets are not all set - APK was built (see workflow artifact) but NOT deployed to updates.xmethod.org. See todo.md."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          scp -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
+            out/GLauncher.apk out/latest.json \
+            "$SSH_USER@$SSH_HOST:/var/www/glauncher-updates/"
+          echo "Deployed. Live manifest:"
+          curl -sf https://updates.xmethod.org/latest.json
