@@ -936,6 +936,16 @@ public class DeviceProfile {
                     + hotseatBarBottomSpacePx
                     + space
                     + extraRowsHeight;
+            if (!isQsbEnable) {
+                // hotseatCellHeightPx is deliberately oversized to fit folder
+                // icon radii, which ate up all of `space` above and left
+                // ~1px of real slack for the dock background pill to show
+                // margin around the icon row. Add the pill's own padding
+                // budget (matches Hotseat.DOCK_PILL_PADDING_TOP/BOTTOM_DP)
+                // straight into the bar so getHotseatLayoutPadding() has
+                // real pixels to split between top/bottom.
+                hotseatBarSizePx += Math.round(24f * mMetrics.density);
+            }
         } else {
             hotseatBarSizePx = hotseatIconSizePx
                     + hotseatQsbSpace
