@@ -158,7 +158,7 @@ android {
         // monotonically increasing code (see .github/workflows/publish_update.yml)
         versionCode System.getenv("GLAUNCHER_VERSION_CODE") != null
                 ? Integer.parseInt(System.getenv("GLAUNCHER_VERSION_CODE"))
-                : 16_00_01_05_05
+                : 16_00_01_05_06
         versionName "${versionDisplayName}"
         buildConfigField "String", "VERSION_DISPLAY_NAME", "\"${versionDisplayName}\""
         buildConfigField "String", "MAJOR_VERSION", "\"${majorVersion}\""
