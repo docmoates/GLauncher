@@ -96,6 +96,7 @@ public class Hotseat extends FrameLayout implements Insettable {
     public static final float QSB_CENTER_FACTOR = .325f;
     private static final int BUBBLE_BAR_ADJUSTMENT_ANIMATION_DURATION_MS = 250;
     private static final int DOCK_PAGE_INDICATOR_HEIGHT_DP = 8;
+    private static final float DOCK_ICON_SCALE = 0.85f;
 
     @ViewDebug.ExportedProperty(category = "launcher")
     private boolean mHasVerticalHotseat;
@@ -658,7 +659,25 @@ public class Hotseat extends FrameLayout implements Insettable {
         int top = bottom - dp.getHotseatProfile().getQsbHeight();
         mQsb.layout(left, top, right, bottom);
 
+        scaleDockIcons();
         centerBackgroundOnIcons();
+    }
+
+    /**
+     * Renders dock icons a little smaller than their grid cell. This is a
+     * visual scale applied after layout (touch targets stay full cell size),
+     * independent of whether the custom dock background is enabled.
+     */
+    private void scaleDockIcons() {
+        CellLayout page = mPagedView.getCurrentCellLayout();
+        if (page == null) return;
+        ShortcutAndWidgetContainer iconRow = page.getShortcutsAndWidgets();
+        if (iconRow == null) return;
+        for (int i = 0; i < iconRow.getChildCount(); i++) {
+            View child = iconRow.getChildAt(i);
+            child.setScaleX(DOCK_ICON_SCALE);
+            child.setScaleY(DOCK_ICON_SCALE);
+        }
     }
 
     /**

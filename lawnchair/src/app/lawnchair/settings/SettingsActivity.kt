@@ -235,6 +235,7 @@ fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
     val prefs2 = preferenceManager2()
     val statusBarAdapter = prefs2.showStatusBar.getAdapter()
     val showStatusBar = statusBarAdapter.state.value
+    val iconShapeAdapter = prefs2.iconShape.getAdapter()
 
     SettingsList {
         item {
@@ -261,6 +262,25 @@ fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 }
             )
         }
+        item { SectionHeader("Icon Shape", Icons.Outlined.CropSquare, accent) }
+        item {
+            SettingDropdown(
+                label = "Shape",
+                description = "Applies to every icon: home, drawer, dock, folders",
+                icon = Icons.Outlined.CropSquare,
+                accent = accent,
+                options = iconShapeOptions.map { it.first },
+                // The device's current shape may not be one of our curated
+                // presets (e.g. it defaults to the system/OEM shape) -
+                // NoSuchElementException here previously crashed the whole
+                // Look tab. Fall back to a neutral label instead.
+                selectedValue = iconShapeOptions.firstOrNull { it.second == iconShapeAdapter.state.value }
+                    ?.first ?: "System Default",
+                onValueChange = { label ->
+                    iconShapeOptions.firstOrNull { it.first == label }?.second?.let(iconShapeAdapter::onChange)
+                }
+            )
+        }
         item { SectionHeader("System Bars", Icons.Outlined.PhoneAndroid, accent) }
         item {
             SettingToggle(
@@ -274,6 +294,15 @@ fun AppearanceSettingsTab(prefs: LauncherPreferences, accent: Color) {
         }
     }
 }
+
+private val iconShapeOptions: List<Pair<String, app.lawnchair.icons.shape.IconShape>> = listOf(
+    "Circle" to app.lawnchair.icons.shape.IconShape.Circle,
+    "Square" to app.lawnchair.icons.shape.IconShape.Square,
+    "Sharp Square" to app.lawnchair.icons.shape.IconShape.SharpSquare,
+    "Rounded Square" to app.lawnchair.icons.shape.IconShape.RoundedSquare,
+    "Squircle" to app.lawnchair.icons.shape.IconShape.Squircle,
+    "Teardrop" to app.lawnchair.icons.shape.IconShape.Teardrop,
+)
 
 @Composable
 fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
