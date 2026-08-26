@@ -203,7 +203,17 @@ public class Hotseat extends FrameLayout implements Insettable {
 
     private void setUpBackground() {
         if(!preferenceManager.getHotseatBG().get()) return;
+        applyBackground(preferenceManager.getHotseatBGVerticalInsetTop().get(),
+                preferenceManager.getHotseatBGVerticalInsetBottom().get());
+    }
 
+    /**
+     * Builds the dock background with the given vertical insets. Horizontal
+     * insets, colour, opacity and corner radius always come from preferences;
+     * the vertical insets are passed in so {@link #onLayout} can recompute them
+     * to vertically centre the background on the icon row.
+     */
+    private void applyBackground(int insetVerticalTop, int insetVerticalBottom) {
         var bgColor = PreferenceCacheExtensionsKt.firstCached(preferenceManager2.getHotseatBackgroundColor());
         var transparency = preferenceManager.getHotseatBGAlpha().get();
         var alphaValue = (transparency * 255) / 100;
@@ -211,8 +221,6 @@ public class Hotseat extends FrameLayout implements Insettable {
         var finalColor = Color.argb(alphaValue, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor));
         int insetHorizontalLeft = preferenceManager.getHotseatBGHorizontalInsetLeft().get();
         int insetHorizontalRight = preferenceManager.getHotseatBGHorizontalInsetRight().get();
-        int insetVerticalTop = preferenceManager.getHotseatBGVerticalInsetTop().get();
-        int insetVerticalBottom = preferenceManager.getHotseatBGVerticalInsetBottom().get();
         float cornerRadiusDp = PreferenceCacheExtensionsKt.firstCached(
                 preferenceManager2.getHotseatBackgroundCornerRadius());
         float cornerRadius = TypedValue.applyDimension(
@@ -225,6 +233,32 @@ public class Hotseat extends FrameLayout implements Insettable {
         InsetDrawable bg = new InsetDrawable(background,
                 insetHorizontalLeft, insetVerticalTop, insetHorizontalRight, insetVerticalBottom);
         setBackground(bg);
+    }
+
+    /**
+     * Re-insets the dock background so it wraps the icon row symmetrically,
+     * using the top inset preference as the padding above and below the icons.
+     * Without this the background is positioned by two independent raw-pixel
+     * insets, so the icons drift off-centre whenever the row's height changes -
+     * e.g. when dock labels are toggled or the search row is disabled.
+     */
+    private void centerBackgroundOnIcons() {
+        if (!preferenceManager.getHotseatBG().get()) return;
+
+        CellLayout page = mPagedView.getCurrentCellLayout();
+        if (page == null) return;
+        View iconRow = page.getShortcutsAndWidgets();
+        if (iconRow == null || iconRow.getHeight() <= 0) return;
+
+        // Icon row bounds expressed in this view's coordinate space.
+        int rowTop = mIconsContainer.getTop() + mPagedView.getTop() + page.getTop()
+                + iconRow.getTop();
+        int rowBottom = rowTop + iconRow.getHeight();
+
+        int padding = preferenceManager.getHotseatBGVerticalInsetTop().get();
+        int top = Math.max(0, rowTop - padding);
+        int bottom = Math.max(0, getHeight() - rowBottom - padding);
+        applyBackground(top, bottom);
     }
 
     /** Provides translation X for hotseat icons for the channel. */
@@ -608,6 +642,8 @@ public class Hotseat extends FrameLayout implements Insettable {
         int bottom = height - dp.getQsbOffsetY();
         int top = bottom - dp.getHotseatProfile().getQsbHeight();
         mQsb.layout(left, top, right, bottom);
+
+        centerBackgroundOnIcons();
     }
 
     /**

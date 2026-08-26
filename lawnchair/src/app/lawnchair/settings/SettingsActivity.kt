@@ -292,6 +292,7 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
     val hotseatBgColorAdapter = prefs2.hotseatBackgroundColor.getAdapter()
     val hotseatModeAdapter = prefs2.hotseatMode.getAdapter()
     val hotseatColumnsUnfoldedAdapter = legacyPrefs.hotseatColumnsUnfolded.getAdapter()
+    val dockLabelsAdapter = prefs2.enableLabelInDock.getAdapter()
 
     // TYPE_MULTI_DISPLAY is Android's own foldable classification, so this
     // covers Pixel Fold, Galaxy Fold and Fold Ultra without hardcoding model
@@ -315,7 +316,7 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
     // InsetDrawable insets are raw pixels; corner radius is dp.
     fun applyMacDockStyle() {
         hotseatModeAdapter.onChange(app.lawnchair.hotseat.DisabledHotseat)
-        hotseatColumnsAdapter.onChange(6)
+        hotseatColumnsAdapter.onChange(5)
         if (isFoldable) hotseatColumnsUnfoldedAdapter.onChange(8)
         hotseatCornerRadiusAdapter.onChange(32f)
         hotseatBgAlphaAdapter.onChange(85)
@@ -390,8 +391,11 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 },
                 icon = Icons.Outlined.Apps,
                 accent = accent,
-                value = gridSize.toFloat(),
-                range = 3f..10f,
+                // Capped at 5 on a closed phone - past that the icons crowd
+                // together and start visually overlapping on a phone-width
+                // screen. The wider unfolded screen can take more.
+                value = gridSize.coerceIn(3, 5).toFloat(),
+                range = 3f..5f,
                 onValueChange = { hotseatColumnsAdapter.onChange(it.toInt()) }
             )
         }
@@ -414,6 +418,102 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
                             "otherwise icons may be dropped when you open the phone.",
                         accent = accent,
                     )
+                }
+            }
+        }
+        item { SectionHeader("Appearance", Icons.Outlined.Palette, accent) }
+        item {
+            SettingToggle(
+                label = "App Names",
+                description = "Show app names under the dock icons",
+                icon = Icons.Outlined.TextFields,
+                accent = accent,
+                checked = dockLabelsAdapter.state.value,
+                onCheckedChange = { dockLabelsAdapter.onChange(it) },
+            )
+        }
+        item {
+            DockColorPicker(
+                accent = accent,
+                selected = hotseatBgColorAdapter.state.value,
+                onSelect = {
+                    hotseatBgAdapter.onChange(true)
+                    hotseatBgColorAdapter.onChange(it)
+                },
+            )
+        }
+    }
+}
+
+private val dockColorSwatches: List<Pair<String, Long>> = listOf(
+    "Charcoal" to 0xFF1C1C1E,
+    "Graphite" to 0xFF3A3A3C,
+    "Snow" to 0xFFFFFFFF,
+    "Sage" to 0xFF5C8A5C,
+    "Ocean" to 0xFF2F6FA8,
+    "Plum" to 0xFF6B4E8A,
+    "Clay" to 0xFFA85C3A,
+    "Rose" to 0xFFC26B7C,
+)
+
+@Composable
+fun DockColorPicker(
+    accent: Color,
+    selected: app.lawnchair.theme.color.ColorOption,
+    onSelect: (app.lawnchair.theme.color.ColorOption) -> Unit,
+) {
+    val selectedArgb = (selected as? app.lawnchair.theme.color.ColorOption.CustomColor)?.color
+
+    SettingCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Outlined.ColorLens, accent)
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Dock Color",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Background colour of the dock",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            dockColorSwatches.forEach { (name, argb) ->
+                val isSelected = selectedArgb == argb.toInt()
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(argb))
+                        .border(
+                            width = if (isSelected) 3.dp else 1.dp,
+                            color = if (isSelected) accent else MaterialTheme.colorScheme.outlineVariant,
+                            shape = CircleShape,
+                        )
+                        .clickable {
+                            onSelect(
+                                app.lawnchair.theme.color.ColorOption.CustomColor(argb.toInt()),
+                            )
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = name,
+                            tint = if (argb == 0xFFFFFFFF) Color.Black else Color.White,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
             }
         }
