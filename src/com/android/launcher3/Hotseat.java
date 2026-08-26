@@ -247,13 +247,28 @@ public class Hotseat extends FrameLayout implements Insettable {
 
         CellLayout page = mPagedView.getCurrentCellLayout();
         if (page == null) return;
-        View iconRow = page.getShortcutsAndWidgets();
+        ShortcutAndWidgetContainer iconRow = page.getShortcutsAndWidgets();
         if (iconRow == null || iconRow.getHeight() <= 0) return;
 
-        // Icon row bounds expressed in this view's coordinate space.
-        int rowTop = mIconsContainer.getTop() + mPagedView.getTop() + page.getTop()
+        // Measure the actual icon views rather than their container. The
+        // container is sized to the full grid cell, which carries a lot of
+        // internal padding (and grows further when labels are enabled), so
+        // wrapping it makes the dock look far taller than its contents.
+        int childTop = Integer.MAX_VALUE;
+        int childBottom = Integer.MIN_VALUE;
+        for (int i = 0; i < iconRow.getChildCount(); i++) {
+            View child = iconRow.getChildAt(i);
+            if (child.getVisibility() == GONE) continue;
+            childTop = Math.min(childTop, child.getTop());
+            childBottom = Math.max(childBottom, child.getBottom());
+        }
+        if (childTop > childBottom) return;
+
+        // Icon bounds expressed in this view's coordinate space.
+        int origin = mIconsContainer.getTop() + mPagedView.getTop() + page.getTop()
                 + iconRow.getTop();
-        int rowBottom = rowTop + iconRow.getHeight();
+        int rowTop = origin + childTop;
+        int rowBottom = origin + childBottom;
 
         int padding = preferenceManager.getHotseatBGVerticalInsetTop().get();
         int top = Math.max(0, rowTop - padding);
