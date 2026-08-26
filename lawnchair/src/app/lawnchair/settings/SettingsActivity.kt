@@ -290,19 +290,22 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
     val hotseatInsetRightAdapter = legacyPrefs.hotseatBGHorizontalInsetRight.getAdapter()
     val hotseatBgColorAdapter = prefs2.hotseatBackgroundColor.getAdapter()
 
-    // Apply a macOS-style dock: rounded floating pill around just the icon
-    // row, no search bar inside it. The Hotseat view stacks the icon row
-    // ABOVE the QSB (search) row, with QSB pinned to the very bottom - so
-    // the background needs a small top inset (hugs the icon row) and a
-    // large bottom inset (excludes the QSB row below it). InsetDrawable
-    // takes raw pixels, not dp.
+    // Rounded card around just the icon row, no search bar inside it.
+    // Hotseat extends CellLayout - the SAME grid system as the home
+    // screen - so icon x-positions are fixed at full-width grid columns
+    // by design (dock icons align under home screen columns). A narrow
+    // "floating pill" background (previously 140px insets) ends up
+    // NARROWER than that fixed icon spread, clipping the edge icons.
+    // Insets here are kept small enough to stay wider than the icon
+    // row instead of fighting the grid. InsetDrawable takes raw pixels,
+    // not dp.
     fun applyMacDockStyle() {
         hotseatQsbAlphaAdapter.onChange(0)
         hotseatCornerRadiusAdapter.onChange(28f)
         hotseatInsetTopAdapter.onChange(16)
         hotseatInsetBottomAdapter.onChange(260)
-        hotseatInsetLeftAdapter.onChange(140)
-        hotseatInsetRightAdapter.onChange(140)
+        hotseatInsetLeftAdapter.onChange(60)
+        hotseatInsetRightAdapter.onChange(60)
         hotseatBgColorAdapter.onChange(app.lawnchair.theme.color.ColorOption.CustomColor(0xFFFFFFFF.toInt()))
     }
 
