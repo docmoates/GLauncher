@@ -127,6 +127,21 @@
             android:name="app.lawnchair.BlankActivity"
             android:theme="@style/Theme.Transparent" />
 
+        <!-- Receives the OAuth redirect for Google account sign-in
+             (custom scheme = applicationId, see GoogleAccountManager). -->
+        <activity
+            android:name="app.lawnchair.google.GoogleAuthRedirectActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${applicationId}" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name="app.lawnchair.settings.SettingsActivity"
             android:exported="true"

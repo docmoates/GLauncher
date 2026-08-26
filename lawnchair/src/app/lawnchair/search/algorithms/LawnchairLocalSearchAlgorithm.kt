@@ -13,6 +13,7 @@ import app.lawnchair.search.algorithms.engine.CalculationSectionBuilder
 import app.lawnchair.search.algorithms.engine.ContactsSectionBuilder
 import app.lawnchair.search.algorithms.engine.EmptyStateSectionBuilder
 import app.lawnchair.search.algorithms.engine.FilesSectionBuilder
+import app.lawnchair.search.algorithms.engine.GoogleSectionBuilder
 import app.lawnchair.search.algorithms.engine.HistorySectionBuilder
 import app.lawnchair.search.algorithms.engine.SearchProvider
 import app.lawnchair.search.algorithms.engine.SearchResult
@@ -27,6 +28,7 @@ import app.lawnchair.search.algorithms.engine.provider.HistorySearchProvider
 import app.lawnchair.search.algorithms.engine.provider.SettingsSearchProvider
 import app.lawnchair.search.algorithms.engine.provider.ShortcutSearchProvider
 import app.lawnchair.search.algorithms.engine.provider.apps.AppSearchProvider
+import app.lawnchair.search.algorithms.engine.provider.google.GoogleApiSearchProvider
 import app.lawnchair.search.algorithms.engine.provider.web.CustomWebSearchProvider
 import app.lawnchair.search.algorithms.engine.provider.web.WebSuggestionProvider
 import com.android.launcher3.LauncherAppState
@@ -58,7 +60,7 @@ class LawnchairLocalSearchAlgorithm(context: Context) : LawnchairSearchAlgorithm
         FileSearchProvider,
         ContactsSearchProvider,
         WebSuggestionProvider,
-    )
+    ) + GoogleApiSearchProvider.allProviders
 
     override fun doSearch(query: String, callback: SearchCallback<BaseAllAppsAdapter.AdapterItem>) {
         appState.model.enqueueModelUpdateTask { _, _, apps ->
@@ -170,6 +172,7 @@ class LawnchairLocalSearchAlgorithm(context: Context) : LawnchairSearchAlgorithm
         CalculationSectionBuilder,
         WebSuggestionsSectionBuilder,
         ContactsSectionBuilder,
+        GoogleSectionBuilder,
         FilesSectionBuilder,
         SettingsSectionBuilder,
         HistorySectionBuilder,

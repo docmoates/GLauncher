@@ -6,6 +6,7 @@ import app.lawnchair.preferences2.firstCached
 import app.lawnchair.search.adapter.SPACE
 import app.lawnchair.search.adapter.SearchTargetCompat
 import app.lawnchair.search.adapter.SearchTargetFactory
+import app.lawnchair.search.algorithms.engine.provider.google.GoogleItemKind
 import com.android.launcher3.R
 
 sealed interface SectionBuilder {
@@ -121,6 +122,29 @@ data object WebSuggestionsSectionBuilder : SectionBuilder {
             },
         )
         targets.add(factory.createHeaderTarget(SPACE))
+        return targets
+    }
+}
+
+data object GoogleSectionBuilder : SectionBuilder {
+    override fun build(
+        context: Context,
+        factory: SearchTargetFactory,
+        results: List<SearchResult>,
+    ): List<SearchTargetCompat> {
+        val googleItems = results.filterIsInstance<SearchResult.GoogleItem>()
+        if (googleItems.isEmpty()) {
+            return emptyList()
+        }
+
+        val targets = mutableListOf<SearchTargetCompat>()
+        val byKind = googleItems.groupBy { it.data.kind }
+        GoogleItemKind.entries.forEach { kind ->
+            val items = byKind[kind] ?: return@forEach
+            targets.add(factory.createHeaderTarget(context.getString(kind.headerRes)))
+            targets.addAll(items.map { factory.createGoogleItemTarget(it.data) })
+            targets.add(factory.createHeaderTarget(SPACE))
+        }
         return targets
     }
 }

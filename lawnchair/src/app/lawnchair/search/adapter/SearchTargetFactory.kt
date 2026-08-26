@@ -28,6 +28,7 @@ import app.lawnchair.search.algorithms.data.FolderInfo
 import app.lawnchair.search.algorithms.data.IFileInfo
 import app.lawnchair.search.algorithms.data.RecentKeyword
 import app.lawnchair.search.algorithms.data.SettingInfo
+import app.lawnchair.search.algorithms.engine.provider.google.GoogleItem
 import app.lawnchair.search.algorithms.engine.provider.web.WebSearchProvider
 import app.lawnchair.theme.color.tokens.ColorTokens
 import app.lawnchair.util.calculateInSampleSize
@@ -260,6 +261,24 @@ class SearchTargetFactory(
 
         // Assuming START_PAGE is a generic package key for this type
         return createSearchLinksTarget(id, action, START_PAGE, extras)
+    }
+
+    fun createGoogleItemTarget(item: GoogleItem): SearchTargetCompat {
+        val id = "google:${item.kind.name.lowercase()}:${item.id}"
+        val viewIntent = Intent(Intent.ACTION_VIEW, item.url.toUri())
+        val bitmap = createSmallSearchResultBitmap(context, item.kind.iconRes)
+        val action = SearchActionCompat.Builder(id, item.title).apply {
+            setIcon(Icon.createWithAdaptiveBitmap(bitmap))
+            item.subtitle?.let { setSubtitle(it) }
+            setIntent(viewIntent)
+        }.build()
+        return createSearchTarget(
+            id,
+            action,
+            LayoutType.HORIZONTAL_MEDIUM_TEXT,
+            SearchTargetCompat.RESULT_TYPE_SUGGESTIONS,
+            GOOGLE_ITEM,
+        )
     }
 
     fun createContactsTarget(info: ContactInfo): SearchTargetCompat {
@@ -550,6 +569,7 @@ object SettingsTarget {
 const val START_PAGE = "startpage"
 const val MARKET_STORE = "marketstore"
 const val WEB_SUGGESTION = "suggestion"
+const val GOOGLE_ITEM = "google_item"
 const val HEADER = "header"
 const val CONTACT = "contact"
 const val FILES = "files"

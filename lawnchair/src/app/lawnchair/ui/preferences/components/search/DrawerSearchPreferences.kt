@@ -3,10 +3,12 @@ package app.lawnchair.ui.preferences.components.search
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.lawnchair.google.GoogleAccountManager
 import app.lawnchair.preferences.PreferenceManager
 import app.lawnchair.preferences.getAdapter
 import app.lawnchair.preferences.not
@@ -17,6 +19,7 @@ import app.lawnchair.search.algorithms.LawnchairSearchAlgorithm
 import app.lawnchair.search.algorithms.engine.provider.web.CustomWebSearchProvider
 import app.lawnchair.ui.preferences.LocalNavController
 import app.lawnchair.ui.preferences.components.HiddenAppsInSearchPreference
+import app.lawnchair.ui.preferences.components.controls.ClickablePreference
 import app.lawnchair.ui.preferences.components.controls.ListPreference
 import app.lawnchair.ui.preferences.components.controls.ListPreferenceEntry
 import app.lawnchair.ui.preferences.components.controls.MainSwitchPreference
@@ -29,6 +32,7 @@ import com.android.launcher3.R
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import kotlinx.coroutines.launch
 
 @Composable
 fun DrawerSearchPreference(
@@ -94,6 +98,89 @@ fun DrawerSearchPreference(
                     ASISearchSettings(prefs)
                 }
             }
+        }
+        if (searchAlgorithm == LawnchairSearchAlgorithm.LOCAL_SEARCH) {
+            GoogleAccountSearchSettings(
+                prefs = prefs,
+                context = context,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GoogleAccountSearchSettings(
+    prefs: PreferenceManager,
+    context: Context,
+) {
+    val accountManager = remember { GoogleAccountManager.getInstance(context) }
+    val signedInEmail = accountManager.signedInEmail.collectAsStateWithLifecycle().value
+    val signedIn = signedInEmail != null
+    val scope = rememberCoroutineScope()
+
+    PreferenceGroup(
+        heading = stringResource(R.string.google_account_section_title),
+        description = stringResource(R.string.google_account_section_description),
+    ) {
+        when {
+            !accountManager.isConfigured -> {
+                ClickablePreference(
+                    label = stringResource(R.string.google_account_sign_in),
+                    subtitle = stringResource(R.string.google_account_not_configured),
+                    onClick = {},
+                )
+            }
+
+            !signedIn -> {
+                ClickablePreference(
+                    label = stringResource(R.string.google_account_sign_in),
+                    subtitle = stringResource(R.string.google_account_sign_in_description),
+                    onClick = { accountManager.beginSignIn(context) },
+                )
+            }
+
+            else -> {
+                ClickablePreference(
+                    label = stringResource(R.string.google_account_signed_in_as, signedInEmail.orEmpty()),
+                    subtitle = stringResource(R.string.google_account_sign_out_description),
+                    confirmationText = stringResource(R.string.google_account_sign_out),
+                    onClick = { scope.launch { accountManager.signOut() } },
+                )
+            }
+        }
+        if (signedIn) {
+            SwitchPreference(
+                adapter = prefs.searchResultGmail.getAdapter(),
+                label = stringResource(R.string.search_pref_result_gmail_title),
+            )
+            SwitchPreference(
+                adapter = prefs.searchResultGoogleDocs.getAdapter(),
+                label = stringResource(R.string.search_pref_result_google_docs_title),
+            )
+            SwitchPreference(
+                adapter = prefs.searchResultGoogleSheets.getAdapter(),
+                label = stringResource(R.string.search_pref_result_google_sheets_title),
+            )
+            SwitchPreference(
+                adapter = prefs.searchResultGoogleSlides.getAdapter(),
+                label = stringResource(R.string.search_pref_result_google_slides_title),
+            )
+            SwitchPreference(
+                adapter = prefs.searchResultGoogleCalendar.getAdapter(),
+                label = stringResource(R.string.search_pref_result_google_calendar_title),
+            )
+            SwitchPreference(
+                adapter = prefs.searchResultGoogleContacts.getAdapter(),
+                label = stringResource(R.string.search_pref_result_google_contacts_title),
+            )
+            SwitchPreference(
+                adapter = prefs.searchResultGoogleTasks.getAdapter(),
+                label = stringResource(R.string.search_pref_result_google_tasks_title),
+            )
+            SwitchPreference(
+                adapter = prefs.searchResultYoutube.getAdapter(),
+                label = stringResource(R.string.search_pref_result_youtube_title),
+            )
         }
     }
 }

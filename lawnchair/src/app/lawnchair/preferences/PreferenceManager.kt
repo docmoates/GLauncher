@@ -157,6 +157,16 @@ class PreferenceManager @Inject constructor(
     val searchResultVisualMedia = BoolPref("pref_searchResultVisualMedia", false, recreate)
     val searchResultStartPageSuggestion = BoolPref("pref_searchResultStartPageSuggestion", true, recreate)
     val searchResultSettingsEntry = BoolPref("pref_searchResultSettingsEntry", false, recreate)
+
+    // Google account powered search results (require sign-in, see GoogleAccountManager)
+    val searchResultGmail = BoolPref("pref_searchResultGmail", true)
+    val searchResultGoogleDocs = BoolPref("pref_searchResultGoogleDocs", true)
+    val searchResultGoogleSheets = BoolPref("pref_searchResultGoogleSheets", true)
+    val searchResultGoogleSlides = BoolPref("pref_searchResultGoogleSlides", true)
+    val searchResultGoogleCalendar = BoolPref("pref_searchResultGoogleCalendar", true)
+    val searchResultGoogleContacts = BoolPref("pref_searchResultGoogleContacts", true)
+    val searchResultGoogleTasks = BoolPref("pref_searchResultGoogleTasks", true)
+    val searchResultYoutube = BoolPref("pref_searchResultYoutube", true)
     val searchResulRecentSuggestion = BoolPref("pref_searchResultRecentSuggestion", false, recreate)
 
     val themedIcons = BoolPref("themed_icons", false, reloadIcons)

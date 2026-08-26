@@ -22,6 +22,7 @@ sealed interface SearchResult {
     data class WebSuggestion(val suggestion: String, val provider: String) : SearchResult
     data class History(val data: RecentKeyword) : SearchResult
     data class Calculation(val data: app.lawnchair.search.algorithms.data.Calculation) : SearchResult
+    data class GoogleItem(val data: app.lawnchair.search.algorithms.engine.provider.google.GoogleItem) : SearchResult
     sealed interface Action : SearchResult {
         data class MarketSearch(val query: String) : Action
         data class WebSearch(
