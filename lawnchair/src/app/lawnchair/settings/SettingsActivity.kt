@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import app.lawnchair.preferences.getAdapter
 import app.lawnchair.preferences.preferenceManager
 import app.lawnchair.preferences2.preferenceManager2
+import com.android.launcher3.InvariantDeviceProfile
 
 private data class SettingsSection(
     val label: String,
@@ -290,6 +291,13 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
     val hotseatInsetRightAdapter = legacyPrefs.hotseatBGHorizontalInsetRight.getAdapter()
     val hotseatBgColorAdapter = prefs2.hotseatBackgroundColor.getAdapter()
     val hotseatModeAdapter = prefs2.hotseatMode.getAdapter()
+    val hotseatColumnsUnfoldedAdapter = legacyPrefs.hotseatColumnsUnfolded.getAdapter()
+
+    // TYPE_MULTI_DISPLAY is Android's own foldable classification, so this
+    // covers Pixel Fold, Galaxy Fold and Fold Ultra without hardcoding model
+    // names. Only foldables get the separate folded/unfolded icon counts.
+    val isFoldable = InvariantDeviceProfile.deviceType ==
+        InvariantDeviceProfile.TYPE_MULTI_DISPLAY
 
     // macOS-style dock: dark rounded pill hugging a tightly-packed row of
     // app icons, with no search bar at all.
@@ -308,6 +316,7 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
     fun applyMacDockStyle() {
         hotseatModeAdapter.onChange(app.lawnchair.hotseat.DisabledHotseat)
         hotseatColumnsAdapter.onChange(6)
+        if (isFoldable) hotseatColumnsUnfoldedAdapter.onChange(8)
         hotseatCornerRadiusAdapter.onChange(32f)
         hotseatBgAlphaAdapter.onChange(85)
         hotseatInsetTopAdapter.onChange(16)
@@ -373,8 +382,12 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
         }
         item {
             SettingSlider(
-                label = "Dock Icons",
-                description = "Number of icons in the dock",
+                label = if (isFoldable) "Dock Icons (Folded)" else "Dock Icons",
+                description = if (isFoldable) {
+                    "Number of icons when the phone is closed"
+                } else {
+                    "Number of icons in the dock"
+                },
                 icon = Icons.Outlined.Apps,
                 accent = accent,
                 value = gridSize.toFloat(),
@@ -382,6 +395,48 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 onValueChange = { hotseatColumnsAdapter.onChange(it.toInt()) }
             )
         }
+        if (isFoldable) {
+            item {
+                SettingSlider(
+                    label = "Dock Icons (Unfolded)",
+                    description = "Number of icons on the open inner screen",
+                    icon = Icons.Outlined.Tablet,
+                    accent = accent,
+                    value = hotseatColumnsUnfoldedAdapter.state.value.toFloat(),
+                    range = 3f..10f,
+                    onValueChange = { hotseatColumnsUnfoldedAdapter.onChange(it.toInt()) }
+                )
+            }
+            if (gridSize > hotseatColumnsUnfoldedAdapter.state.value) {
+                item {
+                    SettingNotice(
+                        text = "Unfolded should have at least as many icons as folded, " +
+                            "otherwise icons may be dropped when you open the phone.",
+                        accent = accent,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingNotice(text: String, accent: Color) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(accent.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.Info,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(text, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

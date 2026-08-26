@@ -555,8 +555,28 @@ public class Hotseat extends FrameLayout implements Insettable {
         int paddingBottom = getPaddingBottom();
 
         DeviceProfile dp = mActivity.getDeviceProfile();
-        mIconsContainer.layout(paddingLeft, paddingTop, width - paddingRight,
-                height - paddingBottom);
+
+        // Center the dock icons horizontally. The dock's CellLayout places icons
+        // in fixed grid columns starting at column 0, so when there are fewer
+        // icons than columns the row sits left-aligned with a gap on the right.
+        // Shift the container by half the unused columns' width so the icons
+        // read as centered under the dock background instead.
+        int centeringOffset = 0;
+        if (!dp.isVerticalBarLayout()) {
+            CellLayout page = mPagedView.getCurrentCellLayout();
+            if (page != null) {
+                int columns = page.getCountX();
+                int icons = page.getShortcutsAndWidgets().getChildCount();
+                if (columns > 0 && icons > 0 && icons < columns) {
+                    int emptyColumns = columns - icons;
+                    centeringOffset =
+                            (emptyColumns * (page.getCellWidth() + dp.hotseatBorderSpace)) / 2;
+                }
+            }
+        }
+
+        mIconsContainer.layout(paddingLeft + centeringOffset, paddingTop,
+                width - paddingRight + centeringOffset, height - paddingBottom);
 
         int containerWidth = mIconsContainer.getWidth();
         int containerHeight = mIconsContainer.getHeight();
