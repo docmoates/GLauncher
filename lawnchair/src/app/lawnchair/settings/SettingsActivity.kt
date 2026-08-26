@@ -282,10 +282,40 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
     val hotseatBgAdapter = legacyPrefs.hotseatBG.getAdapter()
     val hotseatBgAlphaAdapter = legacyPrefs.hotseatBGAlpha.getAdapter()
     val hotseatColumnsAdapter = legacyPrefs.hotseatColumns.getAdapter()
+    val hotseatQsbAlphaAdapter = legacyPrefs.hotseatQsbAlpha.getAdapter()
+    val hotseatCornerRadiusAdapter = prefs2.hotseatBackgroundCornerRadius.getAdapter()
+    val hotseatInsetTopAdapter = legacyPrefs.hotseatBGVerticalInsetTop.getAdapter()
+    val hotseatInsetBottomAdapter = legacyPrefs.hotseatBGVerticalInsetBottom.getAdapter()
+    val hotseatInsetLeftAdapter = legacyPrefs.hotseatBGHorizontalInsetLeft.getAdapter()
+    val hotseatInsetRightAdapter = legacyPrefs.hotseatBGHorizontalInsetRight.getAdapter()
+    val hotseatBgColorAdapter = prefs2.hotseatBackgroundColor.getAdapter()
+
+    // Apply a macOS-style dock: rounded floating pill around just the icon
+    // row, no search bar inside it. The Hotseat view stacks the icon row
+    // ABOVE the QSB (search) row, with QSB pinned to the very bottom - so
+    // the background needs a small top inset (hugs the icon row) and a
+    // large bottom inset (excludes the QSB row below it). InsetDrawable
+    // takes raw pixels, not dp.
+    fun applyMacDockStyle() {
+        hotseatQsbAlphaAdapter.onChange(0)
+        hotseatCornerRadiusAdapter.onChange(28f)
+        hotseatInsetTopAdapter.onChange(16)
+        hotseatInsetBottomAdapter.onChange(260)
+        hotseatInsetLeftAdapter.onChange(140)
+        hotseatInsetRightAdapter.onChange(140)
+        hotseatBgColorAdapter.onChange(app.lawnchair.theme.color.ColorOption.CustomColor(0xFFFFFFFF.toInt()))
+    }
 
     val showDock = hotseatEnabledAdapter.state.value
     val opacity = hotseatBgAlphaAdapter.state.value / 100f
     val gridSize = hotseatColumnsAdapter.state.value
+
+    LaunchedEffect(Unit) {
+        if (showDock) {
+            hotseatBgAdapter.onChange(true)
+            applyMacDockStyle()
+        }
+    }
 
     SettingsList {
         item {
@@ -308,7 +338,10 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
                 checked = showDock,
                 onCheckedChange = {
                     hotseatEnabledAdapter.onChange(it)
-                    if (it) hotseatBgAdapter.onChange(true)
+                    if (it) {
+                        hotseatBgAdapter.onChange(true)
+                        applyMacDockStyle()
+                    }
                 }
             )
         }
