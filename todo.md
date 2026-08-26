@@ -18,10 +18,17 @@ deploys it + `latest.json` to `updates.xmethod.org` — the same thing
       debug keystore)
 - [ ] `KEY_ALIAS` — key alias (`androiddebugkey` for the debug keystore)
 - [ ] `KEY_PASSWORD` — key password (`android` for the debug keystore)
-- [ ] `XMETHOD_SSH_KEY` — private key contents for the `xmethod` SSH host
-      (the one your `~/.ssh/config` alias uses)
-- [ ] `XMETHOD_SSH_HOST` — the hostname behind the `xmethod` alias
-- [ ] `XMETHOD_SSH_USER` — the SSH username for that host
+- [ ] `XMETHOD_SSH_KEY` — **the only deploy secret you must add.** Contents
+      of `~/.ssh/id_rsa` on your Mac (the key the `xmethod` SSH alias uses):
+      `cat ~/.ssh/id_rsa` → paste the whole `-----BEGIN…END-----` block.
+- `XMETHOD_SSH_HOST` / `XMETHOD_SSH_USER` — **not needed.** The workflow
+      already defaults to `wiki.xmethod.net` / `azureuser` (the Azure VM that
+      serves updates.xmethod.org via nginx from `/var/www/glauncher-updates/`).
+      Only set these secrets if that infrastructure ever moves.
+
+Confirmed by probing the live endpoint: `https://updates.xmethod.org/latest.json`
+is served by nginx on the Azure VM and already hosts published GLauncher
+builds, so the deploy path and manifest format are known-good.
 
 Once set, publishing an update = run the "Publish in-app update" workflow
 from the Actions tab (or ask Claude to trigger it). Version codes

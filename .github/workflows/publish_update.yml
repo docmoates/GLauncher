@@ -83,12 +83,17 @@ jobs:
           path: out/
       - name: Deploy to updates.xmethod.org
         env:
+          # Host/user are the xmethod Azure VM that serves updates.xmethod.org
+          # via nginx (files live in /var/www/glauncher-updates/). Overridable
+          # by repo secrets if the infra ever moves; only XMETHOD_SSH_KEY is
+          # required. The key is the one the `xmethod` SSH alias uses on the
+          # Mac (~/.ssh/id_rsa), authorized for azureuser on the box.
           SSH_KEY: ${{ secrets.XMETHOD_SSH_KEY }}
-          SSH_HOST: ${{ secrets.XMETHOD_SSH_HOST }}
-          SSH_USER: ${{ secrets.XMETHOD_SSH_USER }}
+          SSH_HOST: ${{ secrets.XMETHOD_SSH_HOST || 'wiki.xmethod.net' }}
+          SSH_USER: ${{ secrets.XMETHOD_SSH_USER || 'azureuser' }}
         run: |
-          if [ -z "$SSH_KEY" ] || [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
-            echo "::error::XMETHOD_SSH_KEY / XMETHOD_SSH_HOST / XMETHOD_SSH_USER secrets are not all set - APK was built (see workflow artifact) but NOT deployed to updates.xmethod.org. See todo.md."
+          if [ -z "$SSH_KEY" ]; then
+            echo "::error::XMETHOD_SSH_KEY secret is not set - APK was built (see workflow artifact) but NOT deployed to updates.xmethod.org. Add it from ~/.ssh/id_rsa on the Mac. See todo.md."
             exit 1
           fi
           mkdir -p ~/.ssh
