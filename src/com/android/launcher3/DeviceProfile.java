@@ -923,10 +923,18 @@ public class DeviceProfile {
                     + hotseatBarBottomSpacePx
                     + extraRowsHeight;
         } else if (isQsbOnTop()) { // LC-Note: isQsbOnTop, this usually is a foldable device, not a tablet
+            // `space` is derived from hotseatCellHeightPx, which is the ONLY
+            // place label height (iconTextHeight) gets added - this branch
+            // was missing that term entirely (unlike the default branch
+            // below, which includes `+ space`), so with the QSB disabled
+            // (getQsbVisualHeight()=0) and labels on, the bar had zero
+            // spare room: content exactly filled the container, leaving no
+            // margin for the dock background pill's rounding/padding.
             hotseatBarSizePx = hotseatIconSizePx
                     + hotseatQsbSpace
                     + getHotseatProfile().getQsbVisualHeight()
                     + hotseatBarBottomSpacePx
+                    + space
                     + extraRowsHeight;
         } else {
             hotseatBarSizePx = hotseatIconSizePx
@@ -1916,6 +1924,24 @@ public class DeviceProfile {
             int hotseatBarBottomPadding = getHotseatBarBottomPadding();
             int hotseatBarTopPadding =
                     hotseatBarSizePx - hotseatBarBottomPadding - hotseatCellHeightPx * numHotseatRows;
+
+            // ...but only when there actually IS a QSB to make room for. With the
+            // search row disabled (HotseatMode -> empty_view, so qsbVisualHeight
+            // is 0) this branch would still dump ALL the bar's spare height into
+            // top padding, pushing the icon row down until its labels clipped off
+            // the bottom of the screen. Split the slack evenly instead so the row
+            // sits centred in the bar, which is also what the dock background pill
+            // needs in order to show even margins above and below the icons.
+            boolean qsbEnabled = PreferenceCacheExtensionsKt
+                    .firstCached(preferenceManager2.getHotseatMode())
+                    .getLayoutResourceId() != R.layout.empty_view;
+            if (!qsbEnabled) {
+                int slack = hotseatBarTopPadding - hotseatBarBottomPadding;
+                if (slack > 0) {
+                    hotseatBarTopPadding -= slack / 2;
+                    hotseatBarBottomPadding += slack / 2;
+                }
+            }
 
             int hotseatWidth = getHotseatRequiredWidth();
             int startSpacing;

@@ -349,7 +349,13 @@ fun DockSettingsTab(prefs: LauncherPreferences, accent: Color) {
     fun applyMacDockStyle() {
         hotseatModeAdapter.onChange(app.lawnchair.hotseat.DisabledHotseat)
         hotseatColumnsAdapter.onChange(5)
-        if (isFoldable) hotseatColumnsUnfoldedAdapter.onChange(8)
+        // 8 was overflowing to a second (horizontally-scrolling) dock page on
+        // the Pixel Fold's unfolded inner screen instead of fitting on one
+        // page - confirmed visually (partial icon cut off at the edge, a
+        // page-indicator bar appearing). 6 is a conservative value that
+        // fits cleanly; the user can still raise it via the slider if their
+        // specific device has room.
+        if (isFoldable) hotseatColumnsUnfoldedAdapter.onChange(6)
         hotseatCornerRadiusAdapter.onChange(32f)
         hotseatBgAlphaAdapter.onChange(85)
         // Vertical insets (hotseatBGVerticalInsetTop/Bottom) are set here for
