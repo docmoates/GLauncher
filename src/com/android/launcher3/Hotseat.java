@@ -253,17 +253,42 @@ public class Hotseat extends FrameLayout implements Insettable {
         ShortcutAndWidgetContainer iconRow = page.getShortcutsAndWidgets();
         if (iconRow == null || iconRow.getHeight() <= 0) return;
 
-        // Measure the actual icon views rather than their container. The
-        // container is sized to the full grid cell, which carries a lot of
-        // internal padding (and grows further when labels are enabled), so
-        // wrapping it makes the dock look far taller than its contents.
+        // Measure the VISUAL icon+label bounds, not the view bounds. Each
+        // BubbleTextView is stretched to the full grid cell height and
+        // centers its content internally (mCenterVertically shifts
+        // paddingTop to (viewHeight - contentHeight) / 2), so the view can
+        // be ~140px taller than what is actually drawn. Wrapping the view
+        // bounds made the pill hugely tall with the icons floating near its
+        // bottom edge. getIconBounds() gives the true icon rect; the label
+        // row is appended below it when the text is actually visible.
         int childTop = Integer.MAX_VALUE;
         int childBottom = Integer.MIN_VALUE;
+        Rect iconBounds = new Rect();
         for (int i = 0; i < iconRow.getChildCount(); i++) {
             View child = iconRow.getChildAt(i);
             if (child.getVisibility() == GONE) continue;
-            childTop = Math.min(childTop, child.getTop());
-            childBottom = Math.max(childBottom, child.getBottom());
+            int visualTop = 0;
+            int visualBottom = child.getHeight();
+            if (child instanceof BubbleTextView btv) {
+                btv.getIconBounds(iconBounds);
+                visualTop = iconBounds.top;
+                visualBottom = iconBounds.bottom;
+                CharSequence label = btv.getText();
+                if (label != null && label.length() > 0
+                        && Color.alpha(btv.getCurrentTextColor()) > 0) {
+                    android.graphics.Paint.FontMetrics fm = btv.getPaint().getFontMetrics();
+                    visualBottom += btv.getCompoundDrawablePadding()
+                            + (int) Math.ceil(fm.bottom - fm.top);
+                }
+            }
+            // scaleDockIcons() shrinks each view around its centre pivot, so
+            // map the visual bounds through the same transform.
+            float scale = child.getScaleY();
+            float centerY = child.getHeight() / 2f;
+            int top = child.getTop() + Math.round(centerY + (visualTop - centerY) * scale);
+            int bottom = child.getTop() + Math.round(centerY + (visualBottom - centerY) * scale);
+            childTop = Math.min(childTop, top);
+            childBottom = Math.max(childBottom, bottom);
         }
         if (childTop > childBottom) return;
 
@@ -570,6 +595,25 @@ public class Hotseat extends FrameLayout implements Insettable {
         int widthSize = MeasureSpec.getSize(widthMeasureSpec);
         int heightSize = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(widthSize, heightSize);
+
+        // The padding is normally applied once in setInsets(), but that can
+        // run while the device profile is mid-update - e.g. during a fold /
+        // unfold transition, or before the preference cache has warmed up on
+        // a cold start - and nothing re-dispatches insets afterwards, so the
+        // stale values stick and the icon row ends up pushed off the bottom
+        // of the bar (observed on the Pixel Fold cover screen: labels
+        // clipped by the screen edge). Re-derive it from the CURRENT profile
+        // on every measure; setPadding() is a no-op when nothing changed.
+        if (!mActivity.getDeviceProfile().isVerticalBarLayout()) {
+            Rect freshPadding =
+                    mActivity.getDeviceProfile().getHotseatLayoutPadding(getContext());
+            if (freshPadding.left != getPaddingLeft() || freshPadding.top != getPaddingTop()
+                    || freshPadding.right != getPaddingRight()
+                    || freshPadding.bottom != getPaddingBottom()) {
+                setPadding(freshPadding.left, freshPadding.top,
+                        freshPadding.right, freshPadding.bottom);
+            }
+        }
 
         int paddingLeft = getPaddingLeft();
         int paddingRight = getPaddingRight();

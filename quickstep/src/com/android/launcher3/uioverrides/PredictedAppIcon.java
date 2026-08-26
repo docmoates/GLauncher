@@ -59,6 +59,8 @@ import com.android.launcher3.util.SafeCloseable;
 import com.android.launcher3.views.ActivityContext;
 import com.android.launcher3.views.DoubleShadowBubbleTextView;
 
+import app.lawnchair.preferences2.PreferenceCacheExtensionsKt;
+import app.lawnchair.preferences2.PreferenceManager2;
 import app.lawnchair.theme.color.tokens.ColorTokens;
 
 /**
@@ -97,6 +99,7 @@ public class PredictedAppIcon extends DoubleShadowBubbleTextView {
     private final BlurMaskFilter mShadowFilter;
 
     private boolean mIsPinned = false;
+    private boolean mSuppressRingForLabels = false;
     private final AnimColorHolder mPlateColor = new AnimColorHolder();
     boolean mDrawForDrag = false;
 
@@ -142,13 +145,27 @@ public class PredictedAppIcon extends DoubleShadowBubbleTextView {
                 R.dimen.blur_size_thin_outline);
         mShadowFilter = new BlurMaskFilter(shadowSize, BlurMaskFilter.Blur.OUTER);
         mShapePath = ThemeManager.INSTANCE.get(context).getIconShape().getPath(mNormalizedIconSize);
+        // The prediction ring plate fills the whole icon slot while onDraw
+        // shrinks the icon AND its label towards the view centre, so with
+        // Lawnchair's dock labels enabled the label collides with the ring's
+        // bottom edge. Stock launchers never hit this because their hotseat
+        // has no labels. When labels are shown in the dock, render predicted
+        // icons exactly like pinned ones (no ring, no shrink) instead.
+        mSuppressRingForLabels = mDisplay != DISPLAY_TASKBAR
+                && PreferenceCacheExtensionsKt.firstCached(
+                        PreferenceManager2.INSTANCE.get(context).getEnableLabelInDock());
+    }
+
+    /** Whether the un-pinned ring/shrink treatment should be skipped. */
+    private boolean drawAsPinned() {
+        return mIsPinned || mSuppressRingForLabels;
     }
 
     @Override
     public void onDraw(Canvas canvas) {
         int count = canvas.save();
         boolean isSlotMachineAnimRunning = mSlotMachineIcon != null;
-        if (!mIsPinned) {
+        if (!drawAsPinned()) {
             drawRingEffect(canvas);
             if (isSlotMachineAnimRunning) {
                 // Clip to to outside of the ring during the slot machine animation.
@@ -236,7 +253,7 @@ public class PredictedAppIcon extends DoubleShadowBubbleTextView {
             plateColorAnim.setAutoCancel(true);
             changeIconAnim.play(plateColorAnim);
 
-            if (!mIsPinned && oldIcon != null) {
+            if (!drawAsPinned() && oldIcon != null) {
                 // Play the slot machine icon
                 mSlotMachineIcon = oldIcon;
 
@@ -281,7 +298,7 @@ public class PredictedAppIcon extends DoubleShadowBubbleTextView {
     @Override
     public void getIconBounds(Rect outBounds) {
         super.getIconBounds(outBounds);
-        if (!mIsPinned && !mIsDrawingDot) {
+        if (!drawAsPinned() && !mIsDrawingDot) {
             int predictionInset = (int) (getIconSize() * RING_EFFECT_RATIO);
             outBounds.inset(predictionInset, predictionInset);
         }
@@ -430,7 +447,7 @@ public class PredictedAppIcon extends DoubleShadowBubbleTextView {
     @Override
     public void getSourceVisualDragBounds(Rect bounds) {
         super.getSourceVisualDragBounds(bounds);
-        if (!mIsPinned) {
+        if (!drawAsPinned()) {
             int internalSize = (int) (bounds.width() * RING_EFFECT_RATIO);
             bounds.inset(internalSize, internalSize);
         }

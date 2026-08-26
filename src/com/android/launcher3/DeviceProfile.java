@@ -1953,18 +1953,39 @@ public class DeviceProfile {
                 }
             }
 
-            int hotseatWidth = getHotseatRequiredWidth();
             int startSpacing;
             int endSpacing;
-            // Hotseat aligns to the left with nav buttons
-            if (getHotseatProfile().getBarEndOffset() > 0) {
-                startSpacing = getHotseatProfile().getInlineNavButtonsEndSpacingPx();
-                endSpacing = mDeviceProperties.getAvailableWidthPx() - hotseatWidth - startSpacing + hotseatBorderSpace;
+            if (!qsbEnabled) {
+                // Mac-dock mode (search row disabled): getHotseatRequiredWidth()
+                // packs the columns tightly around bare icon widths, which on a
+                // wide unfolded screen crushes the cells so hard that dock
+                // labels truncate ("Mess...", "Chro...") and leaves the pill
+                // background mostly empty on either side. Spread the row across
+                // the workspace width instead, exactly like the default
+                // (non-foldable) branch below, so cells are wide enough for
+                // their labels and the icons fill the pill.
+                float workspaceCellWidth =
+                        (float) mDeviceProperties.getWidthPx() / inv.numColumns;
+                float hotseatCellWidth =
+                        (float) mDeviceProperties.getWidthPx() / numShownHotseatIcons;
+                int hotseatAdjustment = Math.round((workspaceCellWidth - hotseatCellWidth) / 2);
+                startSpacing = hotseatAdjustment + workspacePadding.left
+                        + cellLayoutPaddingPx.left + mInsets.left;
+                endSpacing = hotseatAdjustment + workspacePadding.right
+                        + cellLayoutPaddingPx.right + mInsets.right;
             } else {
-                startSpacing = (mDeviceProperties.getAvailableWidthPx() - hotseatWidth) / 2;
-                endSpacing = startSpacing;
+                int hotseatWidth = getHotseatRequiredWidth();
+                // Hotseat aligns to the left with nav buttons
+                if (getHotseatProfile().getBarEndOffset() > 0) {
+                    startSpacing = getHotseatProfile().getInlineNavButtonsEndSpacingPx();
+                    endSpacing = mDeviceProperties.getAvailableWidthPx() - hotseatWidth
+                            - startSpacing + hotseatBorderSpace;
+                } else {
+                    startSpacing = (mDeviceProperties.getAvailableWidthPx() - hotseatWidth) / 2;
+                    endSpacing = startSpacing;
+                }
+                startSpacing += getAdditionalQsbSpace();
             }
-            startSpacing += getAdditionalQsbSpace();
 
             hotseatBarPadding.top = hotseatBarTopPadding;
             hotseatBarPadding.bottom = hotseatBarBottomPadding;
