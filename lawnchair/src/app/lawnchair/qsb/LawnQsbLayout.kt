@@ -104,7 +104,12 @@ class LawnQsbLayout(context: Context, attrs: AttributeSet?) : FrameLayout(contex
                             onQsbClick = {
                                 val launcher = context.launcher
                                 launcher.lifecycleScope.launch {
-                                    if (prefs2.matchHotseatQsbStyle.firstCached()) {
+                                    if (isInWorkspace()) {
+                                        // The home screen bar drops its results
+                                        // down in place rather than opening the
+                                        // app drawer's search sheet.
+                                        showHomeSearchOverlay(launcher)
+                                    } else if (prefs2.matchHotseatQsbStyle.firstCached()) {
                                         val searchUiManager = launcher.appsView.searchUiManager
                                         searchUiManager.setDirectFocus(true)
                                         searchUiManager.editText?.showKeyboard()
@@ -152,6 +157,21 @@ class LawnQsbLayout(context: Context, attrs: AttributeSet?) : FrameLayout(contex
                     .collect()
             }
         }
+    }
+
+    /** True when this bar is the one pinned to the workspace, not the dock. */
+    private fun isInWorkspace(): Boolean {
+        var view: android.view.ViewParent? = parent
+        while (view is android.view.View) {
+            if (view.id == R.id.search_container_workspace) return true
+            view = view.parent
+        }
+        return false
+    }
+
+    /** Anchors the drop-down results panel to this bar's on-screen position. */
+    private fun showHomeSearchOverlay(launcher: app.lawnchair.LawnchairLauncher) {
+        HomeSearchOverlay.show(launcher = launcher, anchor = this)
     }
 
     private fun openOptions() {
