@@ -2,13 +2,16 @@ package app.lawnchair.google
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.edit
 import androidx.core.net.toUri
-import com.android.launcher3.BuildConfig
 import com.android.launcher3.R
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.URLDecoder
 import java.security.MessageDigest
 import java.security.SecureRandom
 import kotlinx.coroutines.Dispatchers
@@ -17,183 +20,240 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.FormBody
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
 
 /**
- * Manages a single Google account connection for the launcher's Google-powered
+ * Manages the Google account connection behind the launcher's Google-powered
  * search providers (Gmail, Drive, Calendar, Contacts, Tasks, YouTube).
  *
- * Uses the OAuth 2.0 authorization-code flow with PKCE for installed apps, so
- * no client secret is required. The OAuth client ID must be configured in
- * Google Cloud and pasted into `google_oauth_client_id` (see todo.md at the
- * repository root).
+ * Authorization is delegated entirely to the XMethod portal
+ * (see [XmethodPortal]): the portal owns the Google OAuth client and holds the
+ * refresh token encrypted server-side, so this launcher needs no Google Cloud
+ * project of its own and never stores a long-lived Google credential. The only
+ * things kept on device are the portal API key and a short-lived access token.
+ *
+ * The consent step uses the OAuth authorization-code flow with PKCE and a
+ * loopback redirect (`http://127.0.0.1:<ephemeral-port>/callback`), matching
+ * the desktop XMethod Browser. The portal's Google client is a Desktop-app
+ * client, which accepts any loopback port without pre-registration.
  */
 class GoogleAccountManager private constructor(private val context: Context) {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val httpClient = OkHttpClient()
+    private val portal = XmethodPortal.getInstance(context)
     private val refreshMutex = Mutex()
 
     private val _signedInEmail = MutableStateFlow(prefs.getString(KEY_EMAIL, null))
 
-    /** The e-mail address of the connected account, or null when signed out. */
+    /** The e-mail address of the connected Google account, or null when not connected. */
     val signedInEmail: StateFlow<String?> = _signedInEmail
 
+    /** The portal account the Google connection hangs off. */
+    val portalEmail: StateFlow<String?> = portal.portalEmail
+
+    /** True when the user has signed in to the XMethod portal. */
+    val isPortalSignedIn: Boolean
+        get() = portal.isSignedIn
+
+    /** True when a Google connection is available for search to use. */
     val isSignedIn: Boolean
-        get() = prefs.getString(KEY_REFRESH_TOKEN, null) != null
+        get() = portal.isSignedIn && prefs.getBoolean(KEY_CONNECTED, false)
 
-    private val clientId: String
-        get() = context.getString(R.string.google_oauth_client_id)
-
-    /** True once the OAuth client ID has been configured in Google Cloud. */
+    /** True once a portal is configured to authorize against. */
     val isConfigured: Boolean
-        get() = clientId.isNotBlank()
+        get() = portal.isConfigured
 
-    private val redirectUri: String
-        get() = "${BuildConfig.APPLICATION_ID}:$REDIRECT_PATH"
+    /** Signs in to the XMethod portal. Returns null on success, else an error message. */
+    suspend fun signInToPortal(email: String, password: String): String? {
+        val error = portal.signIn(email, password)
+        if (error == null) {
+            // The portal may already hold a Google connection made from another
+            // XMethod client (the desktop browser). If so, adopt it silently so
+            // the user isn't asked to consent a second time.
+            probeExistingConnection()
+        }
+        return error
+    }
 
     /**
-     * Launches the browser-based Google sign-in flow. The redirect lands in
-     * [GoogleAuthRedirectActivity], which calls [handleAuthRedirect].
+     * Runs the Google consent flow and hands the resulting code to the portal.
+     * Returns null on success, or a human-readable error message.
+     *
+     * Must be called off the main thread; it blocks on the loopback callback
+     * until the user finishes (or abandons) consent in the browser.
      */
-    fun beginSignIn(context: Context) {
-        if (!isConfigured) return
+    suspend fun connectGoogle(context: Context): String? = withContext(Dispatchers.IO) {
+        if (!portal.isSignedIn) return@withContext context.getString(R.string.portal_not_signed_in)
+        val clientId = portal.googleClientId()
+            ?: return@withContext context.getString(R.string.google_account_portal_unconfigured)
+
         val verifier = generateCodeVerifier()
-        prefs.edit { putString(KEY_PENDING_VERIFIER, verifier) }
+        ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
+            server.soTimeout = CONSENT_TIMEOUT_MS
+            val redirectUri = "http://127.0.0.1:${server.localPort}/callback"
 
-        val authUri = AUTH_ENDPOINT.toUri().buildUpon()
-            .appendQueryParameter("client_id", clientId)
-            .appendQueryParameter("redirect_uri", redirectUri)
-            .appendQueryParameter("response_type", "code")
-            .appendQueryParameter("scope", SCOPES.joinToString(" "))
-            .appendQueryParameter("code_challenge", codeChallenge(verifier))
-            .appendQueryParameter("code_challenge_method", "S256")
-            .appendQueryParameter("prompt", "consent")
-            .build()
+            val authUri = AUTH_ENDPOINT.toUri().buildUpon()
+                .appendQueryParameter("client_id", clientId)
+                .appendQueryParameter("redirect_uri", redirectUri)
+                .appendQueryParameter("response_type", "code")
+                .appendQueryParameter("scope", SCOPES.joinToString(" "))
+                .appendQueryParameter("code_challenge", codeChallenge(verifier))
+                .appendQueryParameter("code_challenge_method", "S256")
+                .appendQueryParameter("access_type", "offline")
+                .appendQueryParameter("prompt", "consent")
+                .build()
 
-        val intent = Intent(Intent.ACTION_VIEW, authUri)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, authUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.onFailure {
+                Log.e(TAG, "No browser available for Google consent", it)
+                return@withContext context.getString(R.string.google_account_no_browser)
+            }
+
+            val callback = awaitCallback(server)
+                ?: return@withContext context.getString(R.string.google_account_sign_in_failed)
+            callback.error?.let {
+                Log.w(TAG, "Google consent returned error: $it")
+                return@withContext context.getString(R.string.google_account_sign_in_failed)
+            }
+            val code = callback.code
+                ?: return@withContext context.getString(R.string.google_account_sign_in_failed)
+
+            val token = portal.exchangeGoogleCode(code, redirectUri, verifier)
+                ?: return@withContext context.getString(R.string.google_account_sign_in_failed)
+            store(token)
+        }
+        null
     }
 
     /**
-     * Completes the sign-in flow with the redirect URI Google sent back.
-     * @return true when tokens were obtained and stored.
-     */
-    suspend fun handleAuthRedirect(uri: Uri): Boolean = withContext(Dispatchers.IO) {
-        val code = uri.getQueryParameter("code") ?: run {
-            Log.w(TAG, "Auth redirect missing code: ${uri.getQueryParameter("error")}")
-            return@withContext false
-        }
-        val verifier = prefs.getString(KEY_PENDING_VERIFIER, null) ?: return@withContext false
-
-        val body = FormBody.Builder()
-            .add("client_id", clientId)
-            .add("code", code)
-            .add("code_verifier", verifier)
-            .add("grant_type", "authorization_code")
-            .add("redirect_uri", redirectUri)
-            .build()
-
-        val json = postForm(TOKEN_ENDPOINT, body) ?: return@withContext false
-        val accessToken = json.optString("access_token").takeIf { it.isNotEmpty() }
-            ?: return@withContext false
-        val refreshToken = json.optString("refresh_token").takeIf { it.isNotEmpty() }
-        val expiresIn = json.optLong("expires_in", 3600)
-
-        prefs.edit {
-            putString(KEY_ACCESS_TOKEN, accessToken)
-            if (refreshToken != null) putString(KEY_REFRESH_TOKEN, refreshToken)
-            putLong(KEY_EXPIRY, System.currentTimeMillis() + expiresIn * 1000)
-            remove(KEY_PENDING_VERIFIER)
-        }
-
-        fetchUserEmail(accessToken)?.let { email ->
-            prefs.edit { putString(KEY_EMAIL, email) }
-            _signedInEmail.value = email
-        } ?: run { _signedInEmail.value = context.getString(R.string.google_account_signed_in) }
-        true
-    }
-
-    /**
-     * Returns a valid access token, refreshing it when expired.
-     * Null when signed out or the refresh fails.
+     * Returns a valid Google access token, minting a fresh one through the
+     * portal when the cached one is stale. Null when not connected.
      */
     suspend fun getAccessToken(): String? = withContext(Dispatchers.IO) {
         refreshMutex.withLock {
+            if (!portal.isSignedIn) return@withLock null
             val expiry = prefs.getLong(KEY_EXPIRY, 0)
             val current = prefs.getString(KEY_ACCESS_TOKEN, null)
             if (current != null && System.currentTimeMillis() < expiry - EXPIRY_MARGIN_MS) {
                 return@withLock current
             }
-            val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null) ?: return@withLock null
-
-            val body = FormBody.Builder()
-                .add("client_id", clientId)
-                .add("refresh_token", refreshToken)
-                .add("grant_type", "refresh_token")
-                .build()
-            val json = postForm(TOKEN_ENDPOINT, body) ?: return@withLock null
-            val accessToken = json.optString("access_token").takeIf { it.isNotEmpty() }
-                ?: return@withLock null
-            val expiresIn = json.optLong("expires_in", 3600)
-            prefs.edit {
-                putString(KEY_ACCESS_TOKEN, accessToken)
-                putLong(KEY_EXPIRY, System.currentTimeMillis() + expiresIn * 1000)
+            val token = portal.refreshGoogleToken()
+            if (token == null) {
+                // The portal dropped the connection (revoked or expired grant);
+                // stop reporting connected so the UI prompts a reconnect.
+                markDisconnected()
+                return@withLock null
             }
-            accessToken
+            store(token)
+            token.accessToken
         }
     }
 
-    /** Revokes the stored grant and forgets the account. */
+    /** Disconnects Google server-side and forgets it locally. */
+    suspend fun disconnectGoogle() = withContext(Dispatchers.IO) {
+        portal.disconnectGoogle()
+        markDisconnected()
+    }
+
+    /** Signs out of the portal, which also drops the local Google state. */
     suspend fun signOut() = withContext(Dispatchers.IO) {
-        val token = prefs.getString(KEY_REFRESH_TOKEN, null)
-            ?: prefs.getString(KEY_ACCESS_TOKEN, null)
-        if (token != null) {
-            runCatching {
-                val request = Request.Builder()
-                    .url("$REVOKE_ENDPOINT?token=$token")
-                    .post(FormBody.Builder().build())
-                    .build()
-                httpClient.newCall(request).execute().close()
-            }
+        markDisconnected()
+        portal.signOut()
+    }
+
+    /**
+     * Asks the portal for a token without any consent UI. Succeeds when a
+     * Google connection already exists for this portal account.
+     */
+    suspend fun probeExistingConnection(): Boolean = withContext(Dispatchers.IO) {
+        val token = portal.refreshGoogleToken() ?: return@withContext false
+        store(token)
+        true
+    }
+
+    private fun store(token: XmethodPortal.GoogleToken) {
+        prefs.edit {
+            putString(KEY_ACCESS_TOKEN, token.accessToken)
+            putLong(KEY_EXPIRY, System.currentTimeMillis() + token.expiresInSeconds * 1000)
+            putBoolean(KEY_CONNECTED, true)
+            if (token.email != null) putString(KEY_EMAIL, token.email)
         }
+        _signedInEmail.value = token.email
+            ?: prefs.getString(KEY_EMAIL, null)
+            ?: portal.portalEmail.value
+            ?: context.getString(R.string.google_account_signed_in)
+    }
+
+    private fun markDisconnected() {
         prefs.edit {
             remove(KEY_ACCESS_TOKEN)
-            remove(KEY_REFRESH_TOKEN)
             remove(KEY_EXPIRY)
             remove(KEY_EMAIL)
+            putBoolean(KEY_CONNECTED, false)
         }
         _signedInEmail.value = null
     }
 
-    private fun fetchUserEmail(accessToken: String): String? = runCatching {
-        val request = Request.Builder()
-            .url(USERINFO_ENDPOINT)
-            .header("Authorization", "Bearer $accessToken")
-            .build()
-        httpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
-            JSONObject(response.body?.string() ?: return null)
-                .optString("email")
-                .takeIf { it.isNotEmpty() }
-        }
-    }.getOrNull()
+    /**
+     * Serves the loopback callback until the browser hits `/callback` with a
+     * code or an error. Ignores unrelated requests (favicon and the like).
+     */
+    private fun awaitCallback(server: ServerSocket): Callback? = runCatching {
+        var result: Callback? = null
+        while (result == null) {
+            server.accept().use { socket ->
+                val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                val requestLine = reader.readLine()
+                val target = requestLine?.split(' ')?.getOrNull(1)
+                val params = parseQuery(target?.substringAfter('?', "").orEmpty())
+                val code = params["code"]
+                val error = params["error"]
 
-    private fun postForm(url: String, body: FormBody): JSONObject? = runCatching {
-        val request = Request.Builder().url(url).post(body).build()
-        httpClient.newCall(request).execute().use { response ->
-            val text = response.body?.string()
-            if (!response.isSuccessful) {
-                Log.w(TAG, "Token request failed (${response.code}): $text")
-                return null
+                val message = when {
+                    code != null -> context.getString(R.string.google_account_sign_in_success)
+                    error != null -> context.getString(R.string.google_account_sign_in_failed)
+                    else -> ""
+                }
+                socket.getOutputStream().apply {
+                    write(httpResponse(message).toByteArray())
+                    flush()
+                }
+                if (code != null || error != null) {
+                    result = Callback(code, error)
+                }
             }
-            JSONObject(text ?: return null)
         }
-    }.onFailure { Log.e(TAG, "Token request error", it) }.getOrNull()
+        result
+    }.onFailure { Log.w(TAG, "Loopback callback failed or timed out", it) }.getOrNull()
+
+    private fun parseQuery(query: String): Map<String, String> = query
+        .split('&')
+        .mapNotNull { part ->
+            val name = part.substringBefore('=', "").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val value = runCatching {
+                URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
+            }.getOrDefault("")
+            name to value
+        }
+        .toMap()
+
+    private fun httpResponse(message: String): String {
+        val body = "<!doctype html><html><head><meta charset=\"utf-8\">" +
+            "<title>GLauncher</title></head><body style=\"font-family:sans-serif;" +
+            "text-align:center;padding:3rem\"><h2>$message</h2>" +
+            "<p>You can close this tab and return to GLauncher.</p></body></html>"
+        return buildString {
+            append("HTTP/1.1 200 OK\r\n")
+            append("Content-Type: text/html; charset=utf-8\r\n")
+            append("Content-Length: ${body.toByteArray().size}\r\n")
+            append("Connection: close\r\n\r\n")
+            append(body)
+        }
+    }
+
+    private data class Callback(val code: String?, val error: String?)
 
     private fun generateCodeVerifier(): String {
         val bytes = ByteArray(64)
@@ -211,30 +271,32 @@ class GoogleAccountManager private constructor(private val context: Context) {
 
         private const val PREFS_NAME = "google_account"
         private const val KEY_ACCESS_TOKEN = "access_token"
-        private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRY = "token_expiry"
         private const val KEY_EMAIL = "email"
-        private const val KEY_PENDING_VERIFIER = "pending_code_verifier"
+        private const val KEY_CONNECTED = "connected"
 
         private const val AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
-        private const val TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-        private const val REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
-        private const val USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo"
-
-        const val REDIRECT_PATH = "/oauth2redirect"
 
         private const val EXPIRY_MARGIN_MS = 60_000L
-        private val BASE64_FLAGS =
-            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        private const val CONSENT_TIMEOUT_MS = 5 * 60 * 1000
+        private val BASE64_FLAGS = Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
 
+        /**
+         * The scope set the portal's Google client is already configured for
+         * (mirrors SCOPE_MAP in the XMethod Browser's `src/main/google-auth.js`).
+         * Requesting the same set means one consent covers every XMethod client
+         * and the launcher can adopt a connection made from the desktop app.
+         */
         private val SCOPES = listOf(
             "openid",
             "email",
-            "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/drive.metadata.readonly",
-            "https://www.googleapis.com/auth/calendar.readonly",
-            "https://www.googleapis.com/auth/contacts.readonly",
-            "https://www.googleapis.com/auth/tasks.readonly",
+            "profile",
+            "https://www.googleapis.com/auth/gmail.modify",
+            "https://www.googleapis.com/auth/gmail.labels",
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/contacts",
+            "https://www.googleapis.com/auth/tasks",
             "https://www.googleapis.com/auth/youtube.readonly",
         )
 

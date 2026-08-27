@@ -548,9 +548,23 @@
     <!-- Google account powered search -->
     <string name="google_account_section_title">Google account</string>
     <string name="google_account_section_description">Search your Gmail, Drive, Calendar, Contacts, Tasks and YouTube from the launcher. Results open in the matching Google app or browser.</string>
-    <string name="google_account_sign_in">Sign in with Google</string>
-    <string name="google_account_sign_in_description">Connect a Google account to enable these results</string>
-    <string name="google_account_not_configured">Unavailable: the OAuth client ID has not been configured yet (see todo.md)</string>
+    <string name="google_account_sign_in">Connect Google</string>
+    <string name="google_account_sign_in_description">Authorize Google through your XMethod account to enable these results</string>
+    <string name="google_account_not_configured">Unavailable: no XMethod portal is configured in this build</string>
+    <string name="google_account_portal_unconfigured">The portal has no Google client configured yet</string>
+    <string name="google_account_no_browser">No browser available to complete sign-in</string>
+    <string name="google_account_connecting">Waiting for Google sign-in in your browser…</string>
+    <string name="portal_section_title">XMethod account</string>
+    <string name="portal_section_description">Google search results are authorized through your XMethod portal account, so the launcher never needs its own Google Cloud project.</string>
+    <string name="portal_sign_in">Sign in to XMethod</string>
+    <string name="portal_sign_in_description">Use your portal.xmethod.org e-mail and password</string>
+    <string name="portal_signed_in_as">Signed in to XMethod as %1$s</string>
+    <string name="portal_sign_out">Sign out</string>
+    <string name="portal_sign_out_description">Tap to sign out of XMethod and disconnect Google</string>
+    <string name="portal_sign_in_failed">Sign-in failed. Check your e-mail and password.</string>
+    <string name="portal_not_signed_in">Sign in to XMethod first</string>
+    <string name="portal_email">E-mail</string>
+    <string name="portal_password">Password</string>
     <string name="google_account_signed_in">Signed in</string>
     <string name="google_account_signed_in_as">Signed in as %1$s</string>
     <string name="google_account_sign_out">Sign out</string>

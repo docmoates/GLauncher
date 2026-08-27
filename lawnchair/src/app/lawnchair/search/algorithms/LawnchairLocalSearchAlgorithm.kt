@@ -170,9 +170,9 @@ class LawnchairLocalSearchAlgorithm(context: Context) : LawnchairSearchAlgorithm
     private val sectionBuilders: List<SectionBuilder> = listOf(
         AppsAndShortcutsSectionBuilder,
         CalculationSectionBuilder,
+        GoogleSectionBuilder,
         WebSuggestionsSectionBuilder,
         ContactsSectionBuilder,
-        GoogleSectionBuilder,
         FilesSectionBuilder,
         SettingsSectionBuilder,
         HistorySectionBuilder,

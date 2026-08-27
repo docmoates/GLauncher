@@ -1,9 +1,17 @@
 package app.lawnchair.ui.preferences.components.search
 
 import android.content.Context
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -114,19 +122,67 @@ private fun GoogleAccountSearchSettings(
     context: Context,
 ) {
     val accountManager = remember { GoogleAccountManager.getInstance(context) }
+    val portalEmail = accountManager.portalEmail.collectAsStateWithLifecycle().value
     val signedInEmail = accountManager.signedInEmail.collectAsStateWithLifecycle().value
     val signedIn = signedInEmail != null
     val scope = rememberCoroutineScope()
+
+    var showLoginDialog by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    if (showLoginDialog) {
+        PortalLoginDialog(
+            busy = busy,
+            errorMessage = errorMessage,
+            onDismiss = { if (!busy) { showLoginDialog = false; errorMessage = null } },
+            onSubmit = { email, password ->
+                busy = true
+                errorMessage = null
+                scope.launch {
+                    val error = accountManager.signInToPortal(email, password)
+                    busy = false
+                    if (error == null) showLoginDialog = false else errorMessage = error
+                }
+            },
+        )
+    }
+
+    PreferenceGroup(
+        heading = stringResource(R.string.portal_section_title),
+        description = stringResource(R.string.portal_section_description),
+    ) {
+        if (portalEmail == null) {
+            ClickablePreference(
+                label = stringResource(R.string.portal_sign_in),
+                subtitle = stringResource(
+                    if (accountManager.isConfigured) {
+                        R.string.portal_sign_in_description
+                    } else {
+                        R.string.google_account_not_configured
+                    },
+                ),
+                onClick = { if (accountManager.isConfigured) showLoginDialog = true },
+            )
+        } else {
+            ClickablePreference(
+                label = stringResource(R.string.portal_signed_in_as, portalEmail),
+                subtitle = stringResource(R.string.portal_sign_out_description),
+                confirmationText = stringResource(R.string.portal_sign_out),
+                onClick = { scope.launch { accountManager.signOut() } },
+            )
+        }
+    }
 
     PreferenceGroup(
         heading = stringResource(R.string.google_account_section_title),
         description = stringResource(R.string.google_account_section_description),
     ) {
         when {
-            !accountManager.isConfigured -> {
+            portalEmail == null -> {
                 ClickablePreference(
                     label = stringResource(R.string.google_account_sign_in),
-                    subtitle = stringResource(R.string.google_account_not_configured),
+                    subtitle = stringResource(R.string.portal_not_signed_in),
                     onClick = {},
                 )
             }
@@ -134,8 +190,17 @@ private fun GoogleAccountSearchSettings(
             !signedIn -> {
                 ClickablePreference(
                     label = stringResource(R.string.google_account_sign_in),
-                    subtitle = stringResource(R.string.google_account_sign_in_description),
-                    onClick = { accountManager.beginSignIn(context) },
+                    subtitle = stringResource(
+                        if (busy) R.string.google_account_connecting else R.string.google_account_sign_in_description,
+                    ),
+                    onClick = {
+                        if (busy) return@ClickablePreference
+                        busy = true
+                        scope.launch {
+                            accountManager.connectGoogle(context)
+                            busy = false
+                        }
+                    },
                 )
             }
 
@@ -144,10 +209,11 @@ private fun GoogleAccountSearchSettings(
                     label = stringResource(R.string.google_account_signed_in_as, signedInEmail.orEmpty()),
                     subtitle = stringResource(R.string.google_account_sign_out_description),
                     confirmationText = stringResource(R.string.google_account_sign_out),
-                    onClick = { scope.launch { accountManager.signOut() } },
+                    onClick = { scope.launch { accountManager.disconnectGoogle() } },
                 )
             }
         }
+
         if (signedIn) {
             SwitchPreference(
                 adapter = prefs.searchResultGmail.getAdapter(),
@@ -299,5 +365,53 @@ private fun LocalSearchSettings(
     SwitchPreference(
         adapter = prefs.searchResultCalculator.getAdapter(),
         label = stringResource(R.string.all_apps_search_result_calculator),
+    )
+}
+
+@Composable
+private fun PortalLoginDialog(
+    busy: Boolean,
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onSubmit: (email: String, password: String) -> Unit,
+) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.portal_sign_in)) },
+        text = {
+            androidx.compose.foundation.layout.Column {
+                Text(stringResource(R.string.portal_sign_in_description))
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text(stringResource(R.string.portal_email)) },
+                    singleLine = true,
+                    enabled = !busy,
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(R.string.portal_password)) },
+                    singleLine = true,
+                    enabled = !busy,
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+                errorMessage?.let { Text(it) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSubmit(email.trim(), password) },
+                enabled = !busy && email.isNotBlank() && password.isNotBlank(),
+            ) { Text(stringResource(R.string.portal_sign_in)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !busy) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        },
     )
 }

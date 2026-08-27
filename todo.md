@@ -34,52 +34,40 @@ Once set, publishing an update = run the "Publish in-app update" workflow
 from the Actions tab (or ask Claude to trigger it). Version codes
 auto-increment per run, so devices always see it as newer.
 
-## Configure Google Cloud credentials for Google-powered search
+## Google-powered search (configured — no action needed)
 
-The launcher now ships search providers for **Gmail, Google Docs, Sheets,
-Slides, Calendar, Contacts, Tasks, and YouTube**, plus a **Sign in with
-Google** button under *Home Settings → App Drawer → Search → Google account*.
-The sign-in button stays disabled until you configure an OAuth client ID:
+Gmail, Docs, Sheets, Slides, Calendar, Contacts, Tasks and YouTube search are
+authorized through the **XMethod portal** (`https://portal.xmethod.org`), not a
+per-app Google Cloud project. The portal owns the Google OAuth client (id *and*
+secret) and stores the Google refresh token encrypted server-side, so there is
+no client ID to paste into this repo and no Cloud Console work to do.
 
-- [ ] **Create (or pick) a Google Cloud project** at
-      <https://console.cloud.google.com/>.
-- [ ] **Enable these APIs** under *APIs & Services → Library*:
-  - [ ] Gmail API
-  - [ ] Google Drive API (covers Docs, Sheets, and Slides search)
-  - [ ] Google Calendar API
-  - [ ] People API (Google Contacts)
-  - [ ] Google Tasks API
-  - [ ] YouTube Data API v3
-- [ ] **Configure the OAuth consent screen** (*APIs & Services → OAuth
-      consent screen*):
-  - User type: **External**, publishing status **Testing** is fine for
-        personal use — add your own Gmail address under **Test users**.
-  - Add the scopes the app requests: `gmail.readonly`,
-        `drive.metadata.readonly`, `calendar.readonly`, `contacts.readonly`,
-        `tasks.readonly`, `youtube.readonly`, `openid`, `email`.
-- [ ] **Create an OAuth client ID** (*APIs & Services → Credentials →
-      Create credentials → OAuth client ID*):
-  - Application type: **Android**
-  - Package name: `app.lawnchair` (also create one for
-        `app.lawnchair.debug` if you sideload debug builds, and
-        `app.lawnchair.nightly` / `app.lawnchair.play` for those flavors)
-  - SHA-1: from your signing key —
-        `keytool -list -v -keystore <your-keystore>` (or
-        `./gradlew signingReport`)
-- [ ] **Paste the client ID** into
-      `lawnchair/res/values/config.xml` →
-      `<string name="google_oauth_client_id">…apps.googleusercontent.com</string>`
-- [ ] **Rebuild and install**, then sign in from
-      *Home Settings → App Drawer → Search → Google account*.
+How it works (`XmethodPortal.kt` + `GoogleAccountManager.kt`):
+
+1. *Home Settings → App Drawer → Search → XMethod account → Sign in to XMethod*
+   posts your portal e-mail/password to `POST /api/v1/browser/login` and stores
+   the returned `xm_…` API key.
+2. Sign-in immediately probes `POST /api/v1/browser/connections/google/refresh`.
+   If you already connected Google from the XMethod Browser desktop app, the
+   launcher adopts that connection and you are done — no second consent screen.
+3. Otherwise *Connect Google* fetches the public client id from
+   `GET /api/v1/browser/oauth-config`, runs the Google consent flow with PKCE and
+   a loopback redirect (`http://127.0.0.1:<ephemeral-port>/callback` — the
+   portal's Google client is a Desktop-app client, so any loopback port is
+   accepted), and hands the code to
+   `POST /api/v1/browser/connections/google/exchange`. The portal exchanges it
+   with its own client secret and returns only a short-lived access token.
+4. Search refreshes that token through the portal as needed. The device never
+   holds a Google refresh token.
 
 Notes:
 
-- The app uses the OAuth authorization-code flow with PKCE for installed
-  apps, so **no client secret** is needed or stored.
-- The OAuth redirect returns to the app via the custom URI scheme
-  `<applicationId>:/oauth2redirect` (e.g. `app.lawnchair:/oauth2redirect`).
-  Android-type OAuth clients don't require registering redirect URIs.
-- While the consent screen is in **Testing** mode, refresh tokens expire
-  after 7 days — either re-sign-in weekly or publish the consent screen.
-- YouTube Data API search costs 100 quota units per request (10,000/day
-  free), so heavy YouTube searching can hit the daily quota.
+- The launcher requests the same scope set as the XMethod Browser
+  (`SCOPE_MAP` in its `src/main/google-auth.js`), so one consent covers every
+  XMethod client. That set is broader than the launcher's read-only needs; if
+  you want the launcher narrowed to `*.readonly` scopes, those scopes have to be
+  added to the portal's OAuth consent screen first or Google rejects them.
+- *Sign out* of XMethod clears the portal key and the cached Google token.
+  *Disconnect* on the Google row additionally calls
+  `DELETE /api/v1/browser/connections/google`, which revokes the grant with
+  Google and deletes the stored connection.
