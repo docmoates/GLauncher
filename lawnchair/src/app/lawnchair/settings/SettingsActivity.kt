@@ -184,6 +184,7 @@ fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
     // first-page slot. It needs the At a Glance slot itself enabled too.
     val smartspaceEnabledAdapter = prefs2.enableSmartspace.getAdapter()
     val smartspaceModeAdapter = prefs2.smartspaceMode.getAdapter()
+    val matchQsbStyleAdapter = prefs2.matchHotseatQsbStyle.getAdapter()
     val showSearchBar = smartspaceEnabledAdapter.state.value &&
         smartspaceModeAdapter.state.value == LawnchairSearchSmartspace
 
@@ -233,6 +234,9 @@ fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
                     if (enabled) {
                         smartspaceEnabledAdapter.onChange(true)
                         smartspaceModeAdapter.onChange(LawnchairSearchSmartspace)
+                        // Without this the bar hands taps to the Google app, so
+                        // none of the launcher's own results ever show.
+                        matchQsbStyleAdapter.onChange(true)
                     } else {
                         smartspaceModeAdapter.onChange(LawnchairSmartspace)
                     }
