@@ -61,33 +61,63 @@ class XmethodPortal private constructor(private val context: Context) {
      * @return null on success, or a human-readable error message.
      */
     suspend fun signIn(email: String, password: String): String? = withContext(Dispatchers.IO) {
+        val payload = deviceInfo()
+            .put("email", email)
+            .put("password", password)
+        finishLogin("$baseUrl/api/v1/browser/login", payload, fallbackEmail = email)
+    }
+
+    /**
+     * Signs in to the portal with a Google authorization code.
+     *
+     * This is the one-step path: the portal exchanges the code with its own
+     * client secret, issues the portal API key *and* stores the Google refresh
+     * token as the user's Google connection in the same round trip. That means
+     * a single consent screen covers both portal sign-in and Google search —
+     * no password, and no second "Connect Google" step.
+     *
+     * @return null on success, or a human-readable error message.
+     */
+    suspend fun loginWithGoogle(
+        code: String,
+        redirectUri: String,
+        codeVerifier: String,
+    ): String? = withContext(Dispatchers.IO) {
+        val payload = deviceInfo()
+            .put("code", code)
+            .put("redirectUri", redirectUri)
+            .put("codeVerifier", codeVerifier)
+        finishLogin("$baseUrl/api/v1/browser/login/google", payload, fallbackEmail = null)
+    }
+
+    /** Posts a login payload and stores the resulting portal key. */
+    private fun finishLogin(url: String, payload: JSONObject, fallbackEmail: String?): String? {
+        val result = post(url, payload, authorized = false)
+        val json = result.json
+            ?: return result.error ?: context.getString(R.string.portal_sign_in_failed)
+
+        val portalToken = json.optString("token").takeIf { it.isNotEmpty() }
+            ?: return context.getString(R.string.portal_sign_in_failed)
+        val accountEmail = json.optJSONObject("user")?.optString("email")?.takeIf { it.isNotEmpty() }
+            ?: fallbackEmail
+
+        prefs.edit {
+            putString(KEY_PORTAL_TOKEN, portalToken)
+            if (accountEmail != null) putString(KEY_PORTAL_EMAIL, accountEmail)
+        }
+        _portalEmail.value = accountEmail ?: context.getString(R.string.google_account_signed_in)
+        return null
+    }
+
+    private fun deviceInfo(): JSONObject {
         val machineId = runCatching {
             Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
         }.getOrNull() ?: "glauncher-unknown"
-
-        val payload = JSONObject()
-            .put("email", email)
-            .put("password", password)
+        return JSONObject()
             .put("machineId", machineId)
             .put("deviceName", "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim())
             .put("os", "Android ${android.os.Build.VERSION.RELEASE}")
             .put("browserVersion", "GLauncher")
-
-        val result = post("$baseUrl/api/v1/browser/login", payload, authorized = false)
-        val json = result.json
-            ?: return@withContext result.error ?: context.getString(R.string.portal_sign_in_failed)
-
-        val portalToken = json.optString("token").takeIf { it.isNotEmpty() }
-            ?: return@withContext context.getString(R.string.portal_sign_in_failed)
-        val accountEmail = json.optJSONObject("user")?.optString("email")?.takeIf { it.isNotEmpty() }
-            ?: email
-
-        prefs.edit {
-            putString(KEY_PORTAL_TOKEN, portalToken)
-            putString(KEY_PORTAL_EMAIL, accountEmail)
-        }
-        _portalEmail.value = accountEmail
-        null
     }
 
     /** Forgets the portal session. Does not touch the Google connection. */

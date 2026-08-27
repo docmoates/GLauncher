@@ -153,15 +153,37 @@ private fun GoogleAccountSearchSettings(
         description = stringResource(R.string.portal_section_description),
     ) {
         if (portalEmail == null) {
+            // One consent screen signs in to the portal AND connects Google,
+            // so this is the path most users should take.
             ClickablePreference(
-                label = stringResource(R.string.portal_sign_in),
+                label = stringResource(R.string.portal_sign_in_with_google),
                 subtitle = stringResource(
-                    if (accountManager.isConfigured) {
-                        R.string.portal_sign_in_description
-                    } else {
-                        R.string.google_account_not_configured
+                    when {
+                        !accountManager.isConfigured -> R.string.google_account_not_configured
+                        busy -> R.string.google_account_connecting
+                        else -> R.string.portal_sign_in_with_google_description
                     },
                 ),
+                onClick = {
+                    if (!accountManager.isConfigured || busy) return@ClickablePreference
+                    busy = true
+                    errorMessage = null
+                    scope.launch {
+                        errorMessage = accountManager.signInWithGoogle(context)
+                        busy = false
+                    }
+                },
+            )
+            errorMessage?.let { message ->
+                ClickablePreference(
+                    label = stringResource(R.string.portal_sign_in_failed_label),
+                    subtitle = message,
+                    onClick = {},
+                )
+            }
+            ClickablePreference(
+                label = stringResource(R.string.portal_sign_in),
+                subtitle = stringResource(R.string.portal_sign_in_description),
                 onClick = { if (accountManager.isConfigured) showLoginDialog = true },
             )
         } else {

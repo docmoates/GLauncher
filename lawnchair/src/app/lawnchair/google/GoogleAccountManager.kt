@@ -83,8 +83,47 @@ class GoogleAccountManager private constructor(private val context: Context) {
      */
     suspend fun connectGoogle(context: Context): String? = withContext(Dispatchers.IO) {
         if (!portal.isSignedIn) return@withContext context.getString(R.string.portal_not_signed_in)
+        runConsent(context) { code, redirectUri, verifier ->
+            val token = portal.exchangeGoogleCode(code, redirectUri, verifier)
+                ?: return@runConsent context.getString(R.string.google_account_sign_in_failed)
+            store(token)
+            null
+        }
+    }
+
+    /**
+     * One-step sign-in: a single Google consent screen both signs the user in
+     * to the XMethod portal and connects Google for search. No password, and
+     * no separate [connectGoogle] step afterwards.
+     *
+     * Returns null on success, or a human-readable error message.
+     */
+    suspend fun signInWithGoogle(context: Context): String? = withContext(Dispatchers.IO) {
+        runConsent(context) { code, redirectUri, verifier ->
+            val error = portal.loginWithGoogle(code, redirectUri, verifier)
+            if (error != null) return@runConsent error
+            // The portal stored the Google refresh token as part of that same
+            // exchange, so a refresh here yields the access token search needs.
+            if (!probeExistingConnection()) {
+                return@runConsent context.getString(R.string.google_account_sign_in_failed)
+            }
+            null
+        }
+    }
+
+    /**
+     * Runs the Google consent flow with PKCE over a loopback redirect and
+     * hands the resulting code to [onCode].
+     *
+     * Must be called off the main thread; it blocks on the loopback callback
+     * until the user finishes (or abandons) consent in the browser.
+     */
+    private suspend fun runConsent(
+        context: Context,
+        onCode: suspend (code: String, redirectUri: String, verifier: String) -> String?,
+    ): String? {
         val clientId = portal.googleClientId()
-            ?: return@withContext context.getString(R.string.google_account_portal_unconfigured)
+            ?: return context.getString(R.string.google_account_portal_unconfigured)
 
         val verifier = generateCodeVerifier()
         ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
@@ -108,23 +147,20 @@ class GoogleAccountManager private constructor(private val context: Context) {
                 )
             }.onFailure {
                 Log.e(TAG, "No browser available for Google consent", it)
-                return@withContext context.getString(R.string.google_account_no_browser)
+                return context.getString(R.string.google_account_no_browser)
             }
 
             val callback = awaitCallback(server)
-                ?: return@withContext context.getString(R.string.google_account_sign_in_failed)
+                ?: return context.getString(R.string.google_account_sign_in_failed)
             callback.error?.let {
                 Log.w(TAG, "Google consent returned error: $it")
-                return@withContext context.getString(R.string.google_account_sign_in_failed)
+                return context.getString(R.string.google_account_sign_in_failed)
             }
             val code = callback.code
-                ?: return@withContext context.getString(R.string.google_account_sign_in_failed)
+                ?: return context.getString(R.string.google_account_sign_in_failed)
 
-            val token = portal.exchangeGoogleCode(code, redirectUri, verifier)
-                ?: return@withContext context.getString(R.string.google_account_sign_in_failed)
-            store(token)
+            return onCode(code, redirectUri, verifier)
         }
-        null
     }
 
     /**

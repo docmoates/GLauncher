@@ -556,6 +556,9 @@
     <string name="google_account_connecting">Waiting for Google sign-in in your browser…</string>
     <string name="portal_section_title">XMethod account</string>
     <string name="portal_section_description">Google search results are authorized through your XMethod portal account, so the launcher never needs its own Google Cloud project.</string>
+    <string name="portal_sign_in_with_google">Sign in with Google</string>
+    <string name="portal_sign_in_with_google_description">One step: signs you in to XMethod and connects Google for search</string>
+    <string name="portal_sign_in_failed_label">Sign-in error</string>
     <string name="portal_sign_in">Sign in to XMethod</string>
     <string name="portal_sign_in_description">Use your portal.xmethod.org e-mail and password</string>
     <string name="portal_signed_in_as">Signed in to XMethod as %1$s</string>
