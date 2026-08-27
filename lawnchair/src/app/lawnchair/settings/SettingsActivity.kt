@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.sp
 import app.lawnchair.preferences.getAdapter
 import app.lawnchair.preferences.preferenceManager
 import app.lawnchair.preferences2.preferenceManager2
+import app.lawnchair.smartspace.model.LawnchairSearchSmartspace
+import app.lawnchair.smartspace.model.LawnchairSmartspace
 import com.android.launcher3.InvariantDeviceProfile
 
 private data class SettingsSection(
@@ -171,11 +173,19 @@ private fun animateColorAsStateCompat(target: Color) =
 @Composable
 fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
     val legacyPrefs = preferenceManager()
+    val prefs2 = preferenceManager2()
     val columnsAdapter = legacyPrefs.workspaceColumns.getAdapter()
     val rowsAdapter = legacyPrefs.workspaceRows.getAdapter()
     val columns = columnsAdapter.state.value
     val rows = rowsAdapter.state.value
-    var showSearchBar by remember { mutableStateOf(prefs.showSearchBar) }
+
+    // The home-screen search bar is the "Search bar" At a Glance mode
+    // (LawnchairSearchSmartspace), which hosts LawnQsbLayout in the pinned
+    // first-page slot. It needs the At a Glance slot itself enabled too.
+    val smartspaceEnabledAdapter = prefs2.enableSmartspace.getAdapter()
+    val smartspaceModeAdapter = prefs2.smartspaceMode.getAdapter()
+    val showSearchBar = smartspaceEnabledAdapter.state.value &&
+        smartspaceModeAdapter.state.value == LawnchairSearchSmartspace
 
     SettingsList {
         item {
@@ -215,13 +225,17 @@ fun HomeSettingsTab(prefs: LauncherPreferences, accent: Color) {
         item {
             SettingToggle(
                 label = "Search Bar",
-                description = "Show the search bar on your home screen (not yet connected to the launcher)",
+                description = "Show the search bar at the top of your home screen",
                 icon = Icons.Outlined.Search,
                 accent = accent,
                 checked = showSearchBar,
-                onCheckedChange = {
-                    showSearchBar = it
-                    prefs.showSearchBar = it
+                onCheckedChange = { enabled ->
+                    if (enabled) {
+                        smartspaceEnabledAdapter.onChange(true)
+                        smartspaceModeAdapter.onChange(LawnchairSearchSmartspace)
+                    } else {
+                        smartspaceModeAdapter.onChange(LawnchairSmartspace)
+                    }
                 }
             )
         }
